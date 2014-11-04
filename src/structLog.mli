@@ -41,15 +41,22 @@ type 'a or_error = [`Ok of 'a | `Error of string ]
 type id
 (** Unique ID for an event, past or current *)
 
-val make : t -> ?within:id -> ?causes:id list -> string -> id
+val make : t -> ?causes:id list -> string -> id
 (** New id, with an informal description (the string parameter). It depends
     on some previous ids (the [causes] list), and some more global context
-    (ongoing event/task, see [within]). *)
+    (ongoing event/task, see [within]).
+    
+    @param within *)
 
-val make_b : t -> ?within:id -> ?causes:id list ->
+val make_b : t -> ?causes:id list ->
              ('a, Buffer.t, unit, id) format4 -> 'a
 (** Same as {!make}, but allows to use Buffer printers to build the
     description. *)
+
+val within : t -> id -> (unit -> 'a) -> 'a
+(** [within log id f] runs [f ()] in a context in which any event
+    will be considered as "within" [id]. The value returned by [f()],
+    or exception raised by [f()], is the result of the expression. *)
 
 (** {2 Log to a File} *)
 
@@ -61,8 +68,36 @@ val log_to_file_exn : string -> t
 (** Unsafe version of {!log_to_file}.
     @raise Failure if it can't open the file *)
 
-val root : t -> id
-(** Root event (the start of the program?) *)
-
 val close : t -> unit
 (** Close log. It will not be usable anymore afterwards *)
+
+(** {2 Unsafe}
+
+Some operators that need to be handled with care *)
+
+module Unsafe : sig
+  val within_enter : t -> id -> unit
+  (** Enter a "within" context, same as {!within}. {b Note}: careful,
+      if you forget to call {!within_exit} (especially in case of exception)
+      it could mess up the hierarchy. *)
+
+  val within_exit : t -> unit
+  (** Exit the "within" context. *)
+end
+
+(** {2 Module Interface} *)
+
+module type S = sig
+  val make : ?causes:id list -> string -> id
+  (** New id, with an informal description (the string parameter). It depends
+      on some previous ids (the [causes] list), and some more global context
+      (ongoing event/task, see [within]). *)
+
+  val make_b : ?causes:id list ->
+               ('a, Buffer.t, unit, id) format4 -> 'a
+  (** Same as {!make}, but allows to use Buffer printers to build the
+      description. *)
+end
+
+val log_to_file_mod : string -> (module S) or_error
+(** First-class module variant of {!log_to_file} *)

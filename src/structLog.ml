@@ -41,24 +41,38 @@ type event = {
 
 type t = {
   mutable cur_id : id;
+  stack : id Stack.t;  (* stack of 'within' *)
   on_event : event -> unit;
   on_close : unit -> unit;
-  root : event;
 }
 
 (** {2 Basic Causal Description} *)
 
-let make t ?within ?(causes=[]) descr =
+let make t ?(causes=[]) descr =
   let id = t.cur_id in
   t.cur_id <- id + 1;
+  let within =
+    if Stack.is_empty t.stack then None else Some (Stack.top t.stack)
+  in
   t.on_event { id; descr; within; causes; };
   id
 
-let make_b t ?within ?causes fmt =
+let make_b t ?causes fmt =
   let buf = Buffer.create 24 in
   Printf.kbprintf
-    (fun buf -> make t ?within ?causes (Buffer.contents buf))
+    (fun buf -> make t ?causes (Buffer.contents buf))
     buf fmt
+
+let within t id f =
+  try
+    Stack.push id t.stack;
+    let x = f () in
+    let id2 = Stack.pop t.stack in
+    assert (id==id2);
+    x
+  with e ->
+    ignore (Stack.pop t.stack);
+    raise e
 
 (** {2 Encoding to/from B-Encode} *)
 
@@ -80,10 +94,7 @@ let log_to_file filename =
     let oc = open_out filename in
     let on_event e = _encode oc e in
     let on_close _ = flush oc; close_out_noerr oc in
-    (* create root event and write it *)
-    let root = {within=None; causes=[]; descr="start"; id=0; } in
-    on_event root;
-    let t = { root; cur_id=1; on_event; on_close; } in
+    let t = { stack=Stack.create(); cur_id=1; on_event; on_close; } in
     Gc.finalise on_close t;
     `Ok t
   with e ->
@@ -93,6 +104,35 @@ let log_to_file_exn filename = match log_to_file filename with
    | `Error msg -> failwith msg
    | `Ok x -> x
 
-let root t = t.root.id
-
 let close t = t.on_close ()
+
+(** {2 Unsafe} *)
+
+module Unsafe = struct
+  let within_enter t id = Stack.push id t.stack
+  let within_exit t = ignore (Stack.pop t.stack)
+end
+
+(** {2 Module Interface} *)
+
+module type S = sig
+  val make : ?causes:id list -> string -> id
+  (** New id, with an informal description (the string parameter). It depends
+      on some previous ids (the [causes] list), and some more global context
+      (ongoing event/task, see [within]). *)
+
+  val make_b : ?causes:id list ->
+               ('a, Buffer.t, unit, id) format4 -> 'a
+  (** Same as {!make}, but allows to use Buffer printers to build the
+      description. *)
+end
+
+let log_to_file_mod filename =
+  match log_to_file filename with
+  | `Ok x ->
+      let module M = struct
+        let make ?causes msg = make x ?causes msg
+        let make_b ?causes msg = make_b x ?causes msg
+      end in
+      `Ok (module M : S)
+  | `Error e -> `Error e
