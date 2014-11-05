@@ -109,11 +109,13 @@ let iter log k =
     | B.Integer v -> failwith ("unknown version: " ^ string_of_int v)
     | _ -> failwith "expected version header"
   end;
-  while true do
-    let b = _parse_next_bencode log in
-    let e = _ev_of_bencode b in
-    k e
-  done
+  try
+    while true do
+      let b = _parse_next_bencode log in
+      let e = _ev_of_bencode b in
+      k e
+    done
+  with Parsing.Parse_error -> () (* end of file.. *)
 
 let iter_below log ~level k =
   assert (level >= 0);
