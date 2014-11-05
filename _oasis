@@ -27,7 +27,7 @@ Library "neperien_parse"
   FindlibParent:    neperien
   Build$:           flag(parse)
   Install$:         flag(parse)
-  BuildDepends:     bytes, bigarray, bencode, unix
+  BuildDepends:     bytes, bencode
 
 Executable "cat_neperien"
   Path:             src/tools/

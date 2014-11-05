@@ -28,7 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 module P = NeperienParse
 
 let print_ev e =
-  Printf.printf "event {id=%s; descr=\"%s\"; level=%d"
+  Printf.printf "event {id=%s; descr=\"%s\"; level=%d; "
     (P.string_of_id e.P.id) e.P.descr e.P.level;
   begin match e.P.prev with
     | None -> ()

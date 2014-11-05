@@ -47,50 +47,103 @@ type event = {
 }
 (** Node of the on-disk tree *)
 
-module BA = Bigarray
-module BA1 = Bigarray.Array1
-
-type maped_file =
-  (char, BA.int8_unsigned_elt, BA.c_layout) BA1.t
+module B = Bencode_types
 
 type t = {
-  fd : Unix.file_descr;
-  arr : maped_file;
+  chan : in_channel;
+  lexbuf : Lexing.lexbuf;
 }
 
-(* TODO: parse a Bencode value at an offset in [arr] *)
-(* TODO: change the bencode value into an event *)
+(* parse a bencode value at t.arr + offset i *)
+let _parse_bencode t i =
+  seek_in t.chan i;
+  Lexing.flush_input t.lexbuf;
+  Bencode_parse.bencode Bencode_lex.bencode t.lexbuf
+
+let _parse_next_bencode t =
+  Bencode_parse.bencode Bencode_lex.bencode t.lexbuf
+
+let _unwrap_exn msg o = match o with
+  | None -> failwith msg
+  | Some x -> x
+
+let get_field name b =
+  try List.assoc name b
+  with Not_found -> failwith ("expected field " ^ name)
+let get_int b = match b with
+  | B.Integer i -> i
+  | _ -> failwith "expected int"
+let get_str b = match b with
+  | B.String s -> s
+  | _ -> failwith "expected string"
+let get_l get b = match b with
+  | B.List l' -> List.map get l'
+  | _ -> failwith "expected list"
+
+let _ev_of_bencode b = match b with
+  | B.Dict l ->
+      let id = get_int (get_field "i" l) in
+      let descr = get_str (get_field "d" l) in
+      let causes =
+        try get_l get_int (List.assoc "c" l)
+        with Not_found -> []
+      in
+      let level = get_int (get_field "l" l) in
+      let prev = try Some (get_int (List.assoc "p" l)) with Not_found -> None in
+      let last_child = try Some(get_int (List.assoc "lc" l)) with Not_found -> None in
+      { id; descr; causes; level; prev; last_child; }
+  | _ -> failwith "expected dict"
 
 let by_id_exn log id =
-  assert false (* TODO *)
+  let b = _parse_bencode log id in
+  _ev_of_bencode b
 
 let by_id log id =
   try Some (by_id_exn log id)
   with Failure _ -> None
 
 let iter log k =
-  assert false (* TODO *)
+  let b = _parse_next_bencode log in
+  begin match b with
+    | B.Integer 1 -> ()
+    | B.Integer v -> failwith ("unknown version: " ^ string_of_int v)
+    | _ -> failwith "expected version header"
+  end;
+  while true do
+    let b = _parse_next_bencode log in
+    let e = _ev_of_bencode b in
+    k e
+  done
 
 let iter_below log ~level k =
   assert (level >= 0);
   iter log (fun e -> if e.level <= level then k e)
 
-let iter_children log e =
-  assert false (* TODO *)
+let rec _iter_prev log e k = match e.prev with
+  | None -> ()
+  | Some id ->
+      let b = _parse_bencode log id in
+      let e' = _ev_of_bencode b in
+      k e';
+      _iter_prev log e' k
+
+let iter_children log e k = match e.last_child with
+  | None -> ()
+  | Some id ->
+      let b = _parse_bencode log id in
+      let e' = _ev_of_bencode b in
+      k e';
+      _iter_prev log e' k
 
 (** {2 Open file} *)
 
-let close log =
-  Unix.close log.fd
+let close log = close_in log.chan
 
 let open_file_exn filename =
-  let fd = Unix.openfile filename [Unix.O_RDONLY] 0 in
-  (* map to an array *)
-  let len = Unix.lseek fd 0 Unix.SEEK_END in
-  let _ = Unix.lseek fd 0 Unix.SEEK_SET in
-  let arr = BA1.map_file fd BA.char BA.C_layout false len in
+  let chan = open_in filename in
+  let lexbuf = Lexing.from_channel chan in
   (* close file on GC *)
-  let log = { fd; arr; } in
+  let log = { chan; lexbuf } in
   Gc.finalise close log;
   log
 
