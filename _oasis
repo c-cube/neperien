@@ -12,6 +12,6 @@ AlphaFeatures: compiled_setup_ml
 
 Synopsis:    Causal logging
 
-Library "structLog"
+Library "neperien"
   Path:             src
-  Modules:          StructLog
+  Modules:          Neperien
