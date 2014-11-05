@@ -41,12 +41,12 @@ type 'a or_error = [`Ok of 'a | `Error of string ]
 type id
 (** Unique ID for an event, past or current *)
 
-val make : t -> ?causes:id list -> string -> id
+val send : t -> ?causes:id list -> string -> id
 (** New id, with an informal description (the string parameter). It depends
     on some previous ids (the [causes] list), and the current context,
     see {!within} *)
 
-val make_b : t -> ?causes:id list ->
+val send_b : t -> ?causes:id list ->
              ('a, Buffer.t, unit, id) format4 -> 'a
 (** Same as {!make}, but allows to use Buffer printers to build the
     description. *)
@@ -99,17 +99,10 @@ end
 
 (** {2 Module Interface} *)
 
-module type S = sig
-  val make : ?causes:id list -> string -> id
-  (** New id, with an informal description (the string parameter). It depends
-      on some previous ids (the [causes] list), and some more global context
-      (ongoing event/task, see [within]). *)
+module type S = Neperien_intf.S
 
-  val make_b : ?causes:id list ->
-               ('a, Buffer.t, unit, id) format4 -> 'a
-  (** Same as {!make}, but allows to use Buffer printers to build the
-      description. *)
-end
+module Make(F : sig val log : t end) : S
+module MakeFile(F : sig val filename : string end) : S
 
 val log_to_file_mod : string -> (module S) or_error
 (** First-class module variant of {!log_to_file} *)

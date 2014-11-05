@@ -72,15 +72,15 @@ let _make t causes descr last_child =
   end;
   { id; descr; causes; prev; level; last_child }
 
-let make t ?(causes=[]) descr =
+let send t ?(causes=[]) descr =
   let e = _make t causes descr None in
   t.on_event e;
   e.id
 
-let make_b t ?causes fmt =
+let send_b t ?causes fmt =
   let buf = Buffer.create 24 in
   Printf.kbprintf
-    (fun buf -> make t ?causes (Buffer.contents buf))
+    (fun buf -> send t ?causes (Buffer.contents buf))
     buf fmt
 
 let _push t =
@@ -217,24 +217,30 @@ let close t = t.on_close ()
 
 (** {2 Module Interface} *)
 
-module type S = sig
-  val make : ?causes:id list -> string -> id
-  (** New id, with an informal description (the string parameter). It depends
-      on some previous ids (the [causes] list), and some more global context
-      (ongoing event/task, see [within]). *)
+module type S = Neperien_intf.S
 
-  val make_b : ?causes:id list ->
-               ('a, Buffer.t, unit, id) format4 -> 'a
-  (** Same as {!make}, but allows to use Buffer printers to build the
-      description. *)
+module Make(L : sig val log : t end) = struct
+  let send ?causes msg = send L.log ?causes msg
+  let send_b ?causes msg = send_b L.log ?causes msg
+  let within ?causes msg f = within L.log ?causes msg f
+  let within_b ?causes fmt = within_b L.log ?causes fmt
+  let close () = close L.log
+  module Unsafe = struct
+    type level = int
+    let within_enter () = Unsafe.within_enter L.log
+    let within_exit level ?causes msg = Unsafe.within_exit L.log level ?causes msg
+    let within_exit_b level ?causes fmt = Unsafe.within_exit_b L.log level ?causes fmt
+  end
+end
+
+module MakeFile(F : sig val filename : string end) = struct
+  let x = log_to_file_exn F.filename
+  include Make(struct let log = x end)
 end
 
 let log_to_file_mod filename =
   match log_to_file filename with
   | `Ok x ->
-      let module M = struct
-        let make ?causes msg = make x ?causes msg
-        let make_b ?causes msg = make_b x ?causes msg
-      end in
+      let module M = Make(struct let log=x end) in
       `Ok (module M : S)
   | `Error e -> `Error e

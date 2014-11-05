@@ -18,7 +18,7 @@ Flag parse
 
 Library "neperien"
   Path:             src
-  Modules:          Neperien
+  Modules:          Neperien, Neperien_intf
 
 Library "neperien_parse"
   Path:             src/parse/

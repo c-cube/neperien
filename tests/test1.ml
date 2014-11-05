@@ -9,8 +9,8 @@ let log = match L.log_to_file file with
   | `Ok x -> x;;
 L.within log "greetings, all that"
   (fun _id ->
-    let b = L.make log "hello" in
-    let _c = L.make log ~causes:[b] "oh, cheers!" in
+    let b = L.send log "hello" in
+    let _c = L.send_b log ~causes:[b] "oh, cheers! btw 1+1=%d" (1+1) in
     ()
   );;
 L.close log;;
