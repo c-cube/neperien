@@ -36,6 +36,7 @@ Library "neperien_parse"
 Executable "cat_neperien"
   Path:             src/tools/
   MainIs:           cat_neperien.ml
+  CompiledObject:   native
   Build$:           flag(parse)
   Install$:         flag(parse)
   BuildDepends:     neperien.parse
@@ -43,6 +44,7 @@ Executable "cat_neperien"
 Executable "indent_neperien"
   Path:             src/tools/
   MainIs:           indent_neperien.ml
+  CompiledObject:   native
   Build$:           flag(parse)
   Install$:         flag(parse)
   BuildDepends:     neperien.parse, containers, containers.misc

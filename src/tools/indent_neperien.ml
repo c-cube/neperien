@@ -30,10 +30,10 @@ module Box = Containers_misc.PrintBox
 
 (* [e]: event, output: a box *)
 let rec to_box log e =
-  let hd = CCPrint.sprintf "{id=%s; causes=%a}"
+  let hd = CCPrint.sprintf "id=%s\ncauses=%a"
     (P.string_of_id e.P.id) (CCList.pp P.pp_id) e.P.causes
   in
-  let self_box = Box.(vlist ~bars:false [text hd; text e.P.descr]) in
+  let self_box = Box.(frame @@ hlist [text e.P.descr; text hd]) in
   match e.P.last_child with
   | None -> self_box
   | Some _ ->
