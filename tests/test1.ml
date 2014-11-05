@@ -1,16 +1,17 @@
 #!/usr/bin/env ocaml
 #use "topfind";;
 #directory "_build/src";;
-#load "structLog.cma";;
+#load "neperien.cma";;
 let file = "/tmp/yolog";;
-let log = match StructLog.log_to_file file with
+module L = Neperien;;
+let log = match L.log_to_file file with
   | `Error msg -> failwith msg
   | `Ok x -> x;;
-StructLog.within log "a"
+L.within log "greetings, all that"
   (fun _id ->
-    let b = StructLog.make log "b" in
-    let _c = StructLog.make log ~causes:[b] "c" in
+    let b = L.make log "hello" in
+    let _c = L.make log ~causes:[b] "oh, cheers!" in
     ()
   );;
-StructLog.close log;;
+L.close log;;
 print_endline ("consult log file " ^ file);;
