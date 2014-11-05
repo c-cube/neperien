@@ -1,0 +1,18 @@
+opam-version: "1.2"
+name: "neperien"
+version: "0.1"
+maintainer: "Simon Cruanes <simon.cruanes.2007@m4x.org>"
+authors: "Simon Cruanes <simon.cruanes.2007@m4x.org>"
+homepage: "https://github.com/c-cube/neperien/"
+bug-reports: "https://github.com/c-cube/neperien/issues"
+license: "BSD-2-clause"
+build: [
+  ["./configure" "--prefix=%{prefix}%"
+    "--%{bencode:enable}%-parse" "--%{containers:enable}%-indent"]
+  [make]
+]
+install: [make "install"]
+remove: ["ocamlfind" "remove" "neperien"]
+depends: ["ocamlfind" {build}]
+depopts: ["containers" "bencode"]
+tags: ["log" "hierarchy" "tree"]
