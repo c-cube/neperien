@@ -101,7 +101,7 @@ module MakeFile(F : sig
   val filename : string
 end) = struct
   (* open file *)
-  let oc = open_out_gen [Open_append; Open_creat] 0o644 F.filename
+  let oc = open_out_gen [Open_append; Open_creat; Open_trunc] 0o644 F.filename
 
   let stack : stack_cell list ref = ref []
   let stack_len = ref 0
