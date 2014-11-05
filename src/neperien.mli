@@ -43,24 +43,22 @@ type id
 
 val make : t -> ?causes:id list -> string -> id
 (** New id, with an informal description (the string parameter). It depends
-    on some previous ids (the [causes] list), and some more global context
-    (ongoing event/task, see [within]).
-    
-    @param within *)
+    on some previous ids (the [causes] list), and the current context,
+    see {!within} *)
 
 val make_b : t -> ?causes:id list ->
              ('a, Buffer.t, unit, id) format4 -> 'a
 (** Same as {!make}, but allows to use Buffer printers to build the
     description. *)
 
-val within : t -> ?causes:id list -> string -> (id -> 'a) -> 'a
-(** [within log ?causes msg f] makes an event out of [causes] and [msg],
-    calls it [id], and runs [f id] in a context in which any event
-    will be considered as "within" [id]. The value returned by [f id],
-    or exception raised by [f id], is the result of the expression. *)
+val within : t -> ?causes:id list -> string -> (unit -> 'a) -> 'a * id
+(** [within log ?causes msg f] creates a new scope in which events will
+    be children of [e], where [e], an event made out of [causes] and [msg]
+    is eventually returned. The value returned by [f unit], paired with [e],
+    or exception raised by [f unit], is the result of the expression. *)
 
 val within_b : t -> ?causes:id list ->
-              ('a, Buffer.t, unit, ((id -> 'b) -> 'b)) format4 -> 'a
+              ('a, Buffer.t, unit, ((unit -> 'b) -> 'b * id)) format4 -> 'a
 
 (** {2 Log to a File} *)
 
@@ -84,17 +82,19 @@ val close : t -> unit
 Some operators that need to be handled with care *)
 
 module Unsafe : sig
-  val within_enter : t -> ?causes:id list -> string -> id
+  type level
+
+  val within_enter : t -> level
   (** Enter a "within" context, same as {!within}. {b Note}: careful,
       if you forget to call {!within_exit} (especially in case of exception)
       it could mess up the hierarchy. *)
 
-  val within_enter_b : t -> ?causes:id list ->
-                        ('a, Buffer.t, unit, id) format4 -> 'a
+  val within_exit : t -> level -> ?causes:id list -> string -> id
+  (** Exit the "within" context, returning the ID of the corresponding event.
+      @raise Failure if the level doesn't match *)
 
-  val within_exit : t -> id -> unit
-  (** Exit the "within" context.
-      @raise Failure if the ID doesn't match the current level (programmer error) *)
+  val within_exit_b : t -> level -> ?causes:id list ->
+                        ('a, Buffer.t, unit, id) format4 -> 'a
 end
 
 (** {2 Module Interface} *)

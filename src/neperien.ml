@@ -30,35 +30,50 @@ type 'a sequence = ('a -> unit) -> unit
 type 'a or_error = [`Ok of 'a | `Error of string ]
 
 type id = int
+(** Offset in file *)
 
 (* one event, before serialization *)
 type event = {
   id : id;
   descr : string;
   causes : id list;
-  mutable children : id list;
+  level : int;
+  prev : id option;
+  last_child : id option;
+}
+
+type stack_cell = {
+  mutable cur_child : id option;
+  sc_prev : id option;
 }
 
 type t = {
-  mutable cur_id : id;
-  stack : event Stack.t;  (* stack of 'within' *)
+  mutable stack : stack_cell list;
+  mutable stack_len : int;
+  get_id : unit -> id; (* fresh ID *)
   on_event : event -> unit;
   on_close : unit -> unit;
 }
 
 (** {2 Basic Causal Description} *)
 
-let _make t causes descr =
-  let id = t.cur_id in
-  t.cur_id <- id + 1;
-  if not (Stack.is_empty t.stack) then (
-    let parent = Stack.top t.stack in
-    parent.children <- id :: parent.children
-  );
-  { id; descr; children=[]; causes; }
+let _prev t = match t.stack with
+  | [] -> None
+  | sc :: _ -> sc.cur_child
+
+let _make t causes descr last_child =
+  let id = t.get_id() in
+  let level = t.stack_len + 1 in
+  (* maintain the prev/child pointers *)
+  let prev = _prev t in
+  begin match t.stack with
+    | [] -> ()
+    | sc :: _ -> sc.cur_child <- Some id
+  end;
+  { id; descr; causes; prev; level; last_child }
 
 let make t ?(causes=[]) descr =
-  let e = _make t causes descr in
+  let e = _make t causes descr None in
   t.on_event e;
   e.id
 
@@ -68,18 +83,35 @@ let make_b t ?causes fmt =
     (fun buf -> make t ?causes (Buffer.contents buf))
     buf fmt
 
+let _push t =
+  let level = t.stack_len + 1 in
+  t.stack_len <- level;
+  t.stack <- {sc_prev=_prev t; cur_child=None; } :: t.stack;
+  level
+
+let _pop t level =
+  if level != t.stack_len
+    then failwith "pop: mismatched levels";
+  match t.stack with
+  | [] -> assert false
+  | sc :: tail ->
+      t.stack <- tail;
+      t.stack_len <- t.stack_len-1;
+      sc
+
 let within t ?(causes=[]) msg f =
-  let e = _make t causes msg in
   try
-    Stack.push e t.stack;
-    let x = f e.id in
-    let e' = Stack.pop t.stack in
-    assert (e' == e);
+    let level = _push t in
+    let x = f () in
+    let sc = _pop t level in
+    (* create event, pointing to its last child, if any *)
+    let last_child = sc.cur_child in
+    let e = _make t causes msg last_child in
     (*  emit now, the event is complete *)
     t.on_event e;
-    x
+    x, e.id
   with ex ->
-    ignore (Stack.pop t.stack);
+    t.stack <- List.tl t.stack;
     raise ex
 
 let within_b t ?causes fmt =
@@ -91,22 +123,24 @@ let within_b t ?causes fmt =
 (** {2 Unsafe} *)
 
 module Unsafe = struct
-  let within_enter t ?(causes=[]) msg =
-    let e = _make t causes msg in
-    Stack.push e t.stack;
+  type level = int
+
+  let within_enter t = _push t
+
+  let within_exit t lev ?(causes=[]) msg =
+    let sc = _pop t lev in
+    (* create event, pointing to its last child, if any *)
+    let last_child = sc.cur_child in
+    let e = _make t causes msg last_child in
+    (*  emit now, the event is complete *)
+    t.on_event e;
     e.id
 
-  let within_enter_b t ?causes fmt =
+  let within_exit_b t level ?causes fmt =
     let buf = Buffer.create 24 in
     Printf.kbprintf
-      (fun buf -> within_enter t ?causes (Buffer.contents buf))
+      (fun buf -> within_exit t level ?causes (Buffer.contents buf))
       buf fmt
-
-  let within_exit t id =
-    let e = Stack.pop t.stack in
-    if e.id != id then failwith "within_exit: mismatched IDs";
-    t.on_event e;
-    ()
 end
 
 (** {2 Encoding to file} *)
@@ -114,26 +148,48 @@ end
 type encoding =
   | Bencode
 
+let _pp_id_list oc l =
+  output_char oc 'l';
+  List.iter (fun id -> Printf.fprintf oc "i%de" id) l;
+  output_char oc 'e';
+  ()
+
 (* format: Bencode dictionary
   "c": list int  (causes IDs)
-  "cs": list int (children)
   "d": string (description)
   "i": int (id)
+  "l": int (level)
+  "lc": int option (last child ID)
+  "p": int option (previous ID)
   *)
 let _encode_bencode oc e =
-  let _pp_id_list oc l =
-    List.iter (fun id -> Printf.fprintf oc "i%de" id) l
-  in
-  output_string oc "d1:cl";
+  output_char oc 'd';
+  (* causes *)
+  output_string oc "1:c";
   _pp_id_list oc e.causes;
-  output_char oc 'e';
-  output_string oc "2:csl";
-  _pp_id_list oc e.children;
-  Printf.fprintf oc "e1:d%d:%s" (String.length e.descr) e.descr;
-  Printf.fprintf oc "1:ii%dee\n" e.id;
+  (* descr *)
+  Printf.fprintf oc "1:d%d:%s" (String.length e.descr) e.descr;
+  (* ID *)
+  Printf.fprintf oc "1:ii%de" e.id;
+  (* level *)
+  Printf.fprintf oc "1:li%de" e.level;
+  (* last child *)
+  begin match e.last_child with
+    | None -> ()
+    | Some i -> Printf.fprintf oc "2:lci%de" i
+  end;
+  (* previous *)
+  begin match e.prev with
+    | None -> ()
+    | Some i -> Printf.fprintf oc "1:pi%de" i
+  end;
+  (* end *)
+  output_string oc "e\n";
   ()
 
 (** {2 Log to a File} *)
+
+let _version_string = "i1e\n" (* version 1 *)
 
 let log_to_file ?(encoding=Bencode) filename =
   try
@@ -143,9 +199,10 @@ let log_to_file ?(encoding=Bencode) filename =
     let on_event = match encoding with
       | Bencode -> (fun e -> _encode_bencode oc e)
     in
+    let get_id() = pos_out oc in
     let on_close _ = flush oc; close_out_noerr oc in
-    (* NOTE: we start with id=1 to make binary encoding easier *)
-    let t = { stack=Stack.create(); cur_id=1; on_event; on_close; } in
+    output_string oc _version_string; (* version string = header *)
+    let t = { stack=[]; stack_len=0; get_id; on_event; on_close; } in
     Gc.finalise on_close t;
     `Ok t
   with e ->
