@@ -175,6 +175,20 @@ end) = struct
       (fun buf -> fun f -> within ?causes (Buffer.contents buf) f)
       buf fmt
 
+  let send' ?causes msg = ignore(send ?causes msg)
+  let send_b' ?causes fmt = 
+    let buf = Buffer.create 24 in
+    Printf.kbprintf
+      (fun buf -> ignore(send ?causes (Buffer.contents buf)))
+      buf fmt
+  let within' ?causes msg f =
+    fst (within ?causes msg f)
+  let within_b' ?causes fmt =
+    let buf = Buffer.create 24 in
+    Printf.kbprintf
+      (fun buf -> fun f -> fst(within ?causes (Buffer.contents buf) f))
+      buf fmt
+
   module Unsafe = struct
     let within_enter () = _push ()
 
@@ -191,6 +205,14 @@ end) = struct
       let buf = Buffer.create 24 in
       Printf.kbprintf
         (fun buf -> within_exit level ?causes (Buffer.contents buf))
+        buf fmt
+
+    let within_exit' lev ?causes msg =
+      ignore (within_exit lev ?causes msg)
+    let within_exit_b' lev ?causes fmt =
+      let buf = Buffer.create 24 in
+      Printf.kbprintf
+        (fun buf -> ignore(within_exit lev ?causes (Buffer.contents buf)))
         buf fmt
   end
 
@@ -221,20 +243,23 @@ module Dummy = struct
   let send ?causes s = _id
 
   let send_b ?causes fmt =
+    Buffer.clear _buf;
     Printf.kbprintf (fun _ -> _id) _buf fmt
 
-  let within ?causes s f =
-    let lev = _push () in
-    try
-      let x = f () in
-      _pop lev;
-      x, _id
-    with ex ->
-      _pop lev;
-      raise ex
+  let within ?causes s f = f (), _id
 
   let within_b ?causes fmt =
+    Buffer.clear _buf;
     Printf.kbprintf (fun _ -> fun f -> f (), _id) _buf fmt
+
+  let send' ?causes s = ()
+  let send_b' ?causes fmt =
+    Printf.ifprintf _buf fmt
+
+  let within' ?causes msg f = fst (within ?causes msg f)
+  let within_b' ?causes fmt =
+    Buffer.clear _buf;
+    Printf.kbprintf (fun _ -> fun f -> f ()) _buf fmt
 
   module Unsafe = struct
     let within_enter = _push
@@ -242,7 +267,13 @@ module Dummy = struct
     let within_exit lev ?causes msg = _pop lev; _id
 
     let within_exit_b lev ?causes fmt =
+      Buffer.clear _buf;
       Printf.kbprintf (fun _ -> _pop lev; _id) _buf fmt
+
+    let within_exit' lev ?causes msg = _pop lev
+    let within_exit_b' lev ?causes fmt =
+      Buffer.clear _buf;
+      Printf.kbprintf (fun _ -> _pop lev) _buf fmt
   end
 end
 
@@ -259,6 +290,12 @@ let send (module L:S) ?causes msg = L.send ?causes msg
 let send_b (module L:S) ?causes msg = L.send_b ?causes msg
 let within (module L:S) ?causes msg f = L.within ?causes msg f
 let within_b (module L:S) ?causes fmt = L.within_b ?causes fmt
+
+let send' (module L:S) ?causes msg = L.send' ?causes msg
+let send_b' (module L:S) ?causes msg = L.send_b' ?causes msg
+let within' (module L:S) ?causes msg f = L.within' ?causes msg f
+let within_b' (module L:S) ?causes fmt = L.within_b' ?causes fmt
+
 let close (module L:S) = L.close ()
 
 type level = Neperien_intf.level
@@ -270,6 +307,11 @@ module Unsafe = struct
     L.Unsafe.within_exit level ?causes msg
   let within_exit_b (module L:S) level ?causes fmt =
     L.Unsafe.within_exit_b level ?causes fmt
+
+  let within_exit' (module L:S) level ?causes msg =
+    L.Unsafe.within_exit' level ?causes msg
+  let within_exit_b' (module L:S) level ?causes fmt =
+    L.Unsafe.within_exit_b' level ?causes fmt
 end
 
 (** {2 Log to a File} *)

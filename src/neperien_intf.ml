@@ -44,6 +44,13 @@ module type S = sig
   val within_b : ?causes:id list ->
                 ('a, Buffer.t, unit, ((unit -> 'b) -> 'b * id)) format4 -> 'a
 
+  val send' : ?causes:id list -> string -> unit
+  val send_b' : ?causes:id list ->
+               ('a, Buffer.t, unit, unit) format4 -> 'a
+  val within' : ?causes:id list -> string -> (unit -> 'a) -> 'a
+  val within_b' : ?causes:id list ->
+                ('a, Buffer.t, unit, ((unit -> 'b) -> 'b)) format4 -> 'a
+
   val close : unit -> unit
 
   module Unsafe : sig
@@ -58,5 +65,9 @@ module type S = sig
 
     val within_exit_b : level -> ?causes:id list ->
                           ('a, Buffer.t, unit, id) format4 -> 'a
+
+    val within_exit' : level -> ?causes:id list -> string -> unit
+    val within_exit_b' : level -> ?causes:id list ->
+                          ('a, Buffer.t, unit, unit) format4 -> 'a
   end
 end

@@ -60,6 +60,13 @@ val within : t -> ?causes:id list -> string -> (unit -> 'a) -> 'a * id
 val within_b : t -> ?causes:id list ->
               ('a, Buffer.t, unit, ((unit -> 'b) -> 'b * id)) format4 -> 'a
 
+val send' : t -> ?causes:id list -> string -> unit
+val send_b' : t -> ?causes:id list ->
+             ('a, Buffer.t, unit, unit) format4 -> 'a
+val within' : t -> ?causes:id list -> string -> (unit -> 'a) -> 'a
+val within_b' : t -> ?causes:id list ->
+              ('a, Buffer.t, unit, ((unit -> 'b) -> 'b)) format4 -> 'a
+
 (** {2 Log to a File} *)
 
 val log_to_file : string -> t or_error
@@ -94,6 +101,10 @@ module Unsafe : sig
 
   val within_exit_b : t -> level -> ?causes:id list ->
                         ('a, Buffer.t, unit, id) format4 -> 'a
+
+  val within_exit' : t -> level -> ?causes:id list -> string -> unit
+  val within_exit_b' : t -> level -> ?causes:id list ->
+                        ('a, Buffer.t, unit, unit) format4 -> 'a
 end
 
 (** {2 Module Interface} *)
