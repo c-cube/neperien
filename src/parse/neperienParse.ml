@@ -56,7 +56,7 @@ type t = {
   filename : string;
 }
 
-(* parse a bencode value at t.arr + offset i *)
+(* parse a bencode value at offset i in file t.chan *)
 let _parse_bencode t i =
   seek_in t.chan i;
   Lexing.flush_input t.lexbuf;
