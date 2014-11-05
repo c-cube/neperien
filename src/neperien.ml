@@ -71,8 +71,10 @@ let _version_string = "i1e\n"
 let _encode_bencode oc e =
   output_char oc 'd';
   (* causes *)
-  output_string oc "1:c";
-  _pp_id_list oc e.causes;
+  if e.causes <> [] then (
+    output_string oc "1:c";
+    _pp_id_list oc e.causes;
+  );
   (* descr *)
   Printf.fprintf oc "1:d%d:%s" (String.length e.descr) e.descr;
   (* ID *)
