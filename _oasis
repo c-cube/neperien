@@ -25,4 +25,13 @@ Library "neperien_parse"
   Modules:          NeperienParse
   FindlibName:      parse
   FindlibParent:    neperien
+  Build$:           flag(parse)
+  Install$:         flag(parse)
   BuildDepends:     bytes, bigarray, bencode, unix
+
+Executable "cat_neperien"
+  Path:             src/tools/
+  MainIs:           cat_neperien.ml
+  Build$:           flag(parse)
+  Install$:         flag(parse)
+  BuildDepends:     neperien.parse

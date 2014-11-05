@@ -34,6 +34,9 @@ type 'a or_error = [`Ok of 'a | `Error of string]
 type id = int
 (* offset within file *)
 
+let equal_id (i:id) j = i=j
+let string_of_id = string_of_int
+
 type event = {
   id : id;
   descr : string;

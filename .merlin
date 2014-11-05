@@ -1,7 +1,10 @@
 S src
 S src/parse/
+S src/tools/
 B _build/src
 B _build/src/parse
+B _build/src/tools/
 PKG bencode
 PKG bigarray
+PKG unix
 FLAG -w +K,+Y,+X

@@ -33,6 +33,9 @@ type 'a or_error = [`Ok of 'a | `Error of string]
 
 type id
 
+val equal_id : id -> id -> bool
+val string_of_id : id -> string
+
 type event = {
   id : id;
   descr : string;
