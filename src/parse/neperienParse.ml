@@ -52,6 +52,7 @@ module B = Bencode_types
 type t = {
   chan : in_channel;
   lexbuf : Lexing.lexbuf;
+  filename : string;
 }
 
 (* parse a bencode value at t.arr + offset i *)
@@ -103,19 +104,27 @@ let by_id log id =
   with Failure _ -> None
 
 let iter log k =
-  let b = _parse_next_bencode log in
-  begin match b with
-    | B.Integer 1 -> ()
-    | B.Integer v -> failwith ("unknown version: " ^ string_of_int v)
-    | _ -> failwith "expected version header"
-  end;
+  (* duplicate log reader *)
+  let chan = open_in log.filename in
+  let lexbuf = Lexing.from_channel chan in
+  let log' = {log with chan; lexbuf; } in
   try
+    (* read header *)
+    let b = _parse_next_bencode log' in
+    begin match b with
+      | B.Integer 1 -> ()
+      | B.Integer v -> failwith ("unknown version: " ^ string_of_int v)
+      | _ -> failwith "expected version header"
+    end;
+    (* traverse *)
     while true do
-      let b = _parse_next_bencode log in
+      let b = _parse_next_bencode log' in
       let e = _ev_of_bencode b in
       k e
     done
-  with Parsing.Parse_error -> () (* end of file.. *)
+  with
+  | Parsing.Parse_error -> close_in chan; () (* end of file.. *)
+  | e -> close_in chan; raise e
 
 let iter_below log ~level k =
   assert (level >= 0);
@@ -145,7 +154,7 @@ let open_file_exn filename =
   let chan = open_in filename in
   let lexbuf = Lexing.from_channel chan in
   (* close file on GC *)
-  let log = { chan; lexbuf } in
+  let log = { chan; lexbuf; filename } in
   Gc.finalise close log;
   log
 
