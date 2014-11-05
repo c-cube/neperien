@@ -28,6 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 (** {1 Module Interface} *)
 
 type id = int
+type level = int
 
 module type S = sig
   val send : ?causes:id list -> string -> id
@@ -46,8 +47,6 @@ module type S = sig
   val close : unit -> unit
 
   module Unsafe : sig
-    type level
-
     val within_enter : unit -> level
     (** Enter a "within" context, same as {!within}. {b Note}: careful,
         if you forget to call {!within_exit} (especially in case of exception)

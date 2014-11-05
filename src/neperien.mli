@@ -62,17 +62,16 @@ val within_b : t -> ?causes:id list ->
 
 (** {2 Log to a File} *)
 
-type encoding =
-  | Bencode
-
-val log_to_file : ?encoding:encoding -> string -> t or_error
+val log_to_file : string -> t or_error
 (** Open the given file in write mode, and in case of success,
-    returns a logger that will write every event to the file
-    @param encoding how to encode events (default [Bencode]) *)
+    returns a logger that will write every event to the file *)
 
-val log_to_file_exn : ?encoding:encoding -> string -> t
+val log_to_file_exn : string -> t
 (** Unsafe version of {!log_to_file}.
     @raise Failure if it can't open the file *)
+
+val log_none : t
+(** Logger that does nothing. IDs will be constants. Very efficient(!) *)
 
 val close : t -> unit
 (** Close log. It will not be usable anymore afterwards *)
@@ -81,9 +80,9 @@ val close : t -> unit
 
 Some operators that need to be handled with care *)
 
-module Unsafe : sig
-  type level
+type level
 
+module Unsafe : sig
   val within_enter : t -> level
   (** Enter a "within" context, same as {!within}. {b Note}: careful,
       if you forget to call {!within_exit} (especially in case of exception)
@@ -101,8 +100,12 @@ end
 
 module type S = Neperien_intf.S
 
-module Make(F : sig val log : t end) : S
-module MakeFile(F : sig val filename : string end) : S
+module MakeFile(F : sig
+  val filename : string
+end) : S
+
+module Dummy : S
+(** Log module that does absolutely nothing *)
 
 val log_to_file_mod : string -> (module S) or_error
 (** First-class module variant of {!log_to_file} *)
