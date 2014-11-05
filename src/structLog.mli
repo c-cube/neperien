@@ -88,6 +88,16 @@ module Unsafe : sig
 
   val within_exit : t -> unit
   (** Exit the "within" context. *)
+
+  type level
+
+  val push : t -> id -> level
+  (** [push log id] enters within the context of [id], and returns a "level".
+      Every event from now on will be "within" [id], until [pop level]
+      (or [pop level'] with [level'] above [id]) is called *)
+
+  val pop : t -> level -> unit
+  (** go back to the given level *)
 end
 
 (** {2 Module Interface} *)

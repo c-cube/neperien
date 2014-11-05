@@ -148,6 +148,13 @@ let close t = t.on_close ()
 module Unsafe = struct
   let within_enter t id = Stack.push id t.stack
   let within_exit t = ignore (Stack.pop t.stack)
+  type level = int
+  let push t id =
+    let l = Stack.length t.stack in
+    Stack.push id t.stack;
+    l
+  let pop t l =
+    while l < Stack.length t.stack do ignore(Stack.pop t.stack) done
 end
 
 (** {2 Module Interface} *)
