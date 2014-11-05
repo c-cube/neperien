@@ -53,21 +53,24 @@ val make_b : t -> ?causes:id list ->
 (** Same as {!make}, but allows to use Buffer printers to build the
     description. *)
 
-val within : t -> id -> (unit -> 'a) -> 'a
-(** [within log id f] runs [f ()] in a context in which any event
-    will be considered as "within" [id]. The value returned by [f()],
-    or exception raised by [f()], is the result of the expression. *)
+val within : t -> ?causes:id list -> string -> (id -> 'a) -> 'a
+(** [within log ?causes msg f] makes an event out of [causes] and [msg],
+    calls it [id], and runs [f id] in a context in which any event
+    will be considered as "within" [id]. The value returned by [f id],
+    or exception raised by [f id], is the result of the expression. *)
+
+val within_b : t -> ?causes:id list ->
+              ('a, Buffer.t, unit, ((id -> 'b) -> 'b)) format4 -> 'a
 
 (** {2 Log to a File} *)
 
 type encoding =
-  | Binary
   | Bencode
 
 val log_to_file : ?encoding:encoding -> string -> t or_error
 (** Open the given file in write mode, and in case of success,
     returns a logger that will write every event to the file
-    @param encoding how to encode events (default [Binary]) *)
+    @param encoding how to encode events (default [Bencode]) *)
 
 val log_to_file_exn : ?encoding:encoding -> string -> t
 (** Unsafe version of {!log_to_file}.
@@ -81,23 +84,17 @@ val close : t -> unit
 Some operators that need to be handled with care *)
 
 module Unsafe : sig
-  val within_enter : t -> id -> unit
+  val within_enter : t -> ?causes:id list -> string -> id
   (** Enter a "within" context, same as {!within}. {b Note}: careful,
       if you forget to call {!within_exit} (especially in case of exception)
       it could mess up the hierarchy. *)
 
-  val within_exit : t -> unit
-  (** Exit the "within" context. *)
+  val within_enter_b : t -> ?causes:id list ->
+                        ('a, Buffer.t, unit, id) format4 -> 'a
 
-  type level
-
-  val push : t -> id -> level
-  (** [push log id] enters within the context of [id], and returns a "level".
-      Every event from now on will be "within" [id], until [pop level]
-      (or [pop level'] with [level'] above [id]) is called *)
-
-  val pop : t -> level -> unit
-  (** go back to the given level *)
+  val within_exit : t -> id -> unit
+  (** Exit the "within" context.
+      @raise Failure if the ID doesn't match the current level (programmer error) *)
 end
 
 (** {2 Module Interface} *)

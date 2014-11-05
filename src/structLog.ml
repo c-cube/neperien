@@ -35,27 +35,32 @@ type id = int
 type event = {
   id : id;
   descr : string;
-  within : id option;
   causes : id list;
+  mutable children : id list;
 }
 
 type t = {
   mutable cur_id : id;
-  stack : id Stack.t;  (* stack of 'within' *)
+  stack : event Stack.t;  (* stack of 'within' *)
   on_event : event -> unit;
   on_close : unit -> unit;
 }
 
 (** {2 Basic Causal Description} *)
 
-let make t ?(causes=[]) descr =
+let _make t causes descr =
   let id = t.cur_id in
   t.cur_id <- id + 1;
-  let within =
-    if Stack.is_empty t.stack then None else Some (Stack.top t.stack)
-  in
-  t.on_event { id; descr; within; causes; };
-  id
+  if not (Stack.is_empty t.stack) then (
+    let parent = Stack.top t.stack in
+    parent.children <- id :: parent.children
+  );
+  { id; descr; children=[]; causes; }
+
+let make t ?(causes=[]) descr =
+  let e = _make t causes descr in
+  t.on_event e;
+  e.id
 
 let make_b t ?causes fmt =
   let buf = Buffer.create 24 in
@@ -63,69 +68,79 @@ let make_b t ?causes fmt =
     (fun buf -> make t ?causes (Buffer.contents buf))
     buf fmt
 
-let within t id f =
+let within t ?(causes=[]) msg f =
+  let e = _make t causes msg in
   try
-    Stack.push id t.stack;
-    let x = f () in
-    let id2 = Stack.pop t.stack in
-    assert (id==id2);
+    Stack.push e t.stack;
+    let x = f e.id in
+    let e' = Stack.pop t.stack in
+    assert (e' == e);
+    (*  emit now, the event is complete *)
+    t.on_event e;
     x
-  with e ->
+  with ex ->
     ignore (Stack.pop t.stack);
-    raise e
+    raise ex
+
+let within_b t ?causes fmt =
+  let buf = Buffer.create 24 in
+  Printf.kbprintf
+    (fun buf -> fun f -> within t ?causes (Buffer.contents buf) f)
+    buf fmt
+
+(** {2 Unsafe} *)
+
+module Unsafe = struct
+  let within_enter t ?(causes=[]) msg =
+    let e = _make t causes msg in
+    Stack.push e t.stack;
+    e.id
+
+  let within_enter_b t ?causes fmt =
+    let buf = Buffer.create 24 in
+    Printf.kbprintf
+      (fun buf -> within_enter t ?causes (Buffer.contents buf))
+      buf fmt
+
+  let within_exit t id =
+    let e = Stack.pop t.stack in
+    if e.id != id then failwith "within_exit: mismatched IDs";
+    t.on_event e;
+    ()
+end
 
 (** {2 Encoding to file} *)
 
 type encoding =
-  | Binary
   | Bencode
 
 (* format: Bencode dictionary
   "c": list int  (causes IDs)
+  "cs": list int (children)
   "d": string (description)
   "i": int (id)
-  "w": optional int (within, parent event)
   *)
 let _encode_bencode oc e =
+  let _pp_id_list oc l =
+    List.iter (fun id -> Printf.fprintf oc "i%de" id) l
+  in
   output_string oc "d1:cl";
-  List.iter (fun id -> Printf.fprintf oc "i%de" id) e.causes;
+  _pp_id_list oc e.causes;
+  output_char oc 'e';
+  output_string oc "2:csl";
+  _pp_id_list oc e.children;
   Printf.fprintf oc "e1:d%d:%s" (String.length e.descr) e.descr;
-  Printf.fprintf oc "1:ii%de" e.id;
-  begin match e.within with
-    | None -> ()
-    | Some id -> Printf.fprintf oc "1:wi%de" id
-  end;
-  output_char oc 'e'
-
-(* format:
-  id:int          = unique ID
-  n:int           = size of list of causes
-  int_1,...,int_n = list of causes
-  d:int           = size of descr, in bytes
-  string          = description (length d)
-  w:int           = 0 if no "within" | the ID of context
-*)
-let _encode_binary oc e =
-  assert (e.id > 0);
-  output_binary_int oc e.id;
-  output_binary_int oc (List.length e.causes);
-  List.iter (output_binary_int oc) e.causes;
-  output_binary_int oc (String.length e.descr);
-  output_string oc e.descr;
-  match e.within with
-    | None -> output_binary_int oc 0
-    | Some i -> assert (i!=0); output_binary_int oc i
+  Printf.fprintf oc "1:ii%dee\n" e.id;
+  ()
 
 (** {2 Log to a File} *)
 
-let log_to_file ?(encoding=Binary) filename =
+let log_to_file ?(encoding=Bencode) filename =
   try
     let oc = match encoding with
-      | Binary -> open_out_bin filename
       | Bencode -> open_out filename
     in
     let on_event = match encoding with
-      | Binary -> (fun e -> _encode_binary oc e)
       | Bencode -> (fun e -> _encode_bencode oc e)
     in
     let on_close _ = flush oc; close_out_noerr oc in
@@ -142,20 +157,6 @@ let log_to_file_exn ?encoding filename =
    | `Ok x -> x
 
 let close t = t.on_close ()
-
-(** {2 Unsafe} *)
-
-module Unsafe = struct
-  let within_enter t id = Stack.push id t.stack
-  let within_exit t = ignore (Stack.pop t.stack)
-  type level = int
-  let push t id =
-    let l = Stack.length t.stack in
-    Stack.push id t.stack;
-    l
-  let pop t l =
-    while l < Stack.length t.stack do ignore(Stack.pop t.stack) done
-end
 
 (** {2 Module Interface} *)
 
