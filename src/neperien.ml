@@ -323,4 +323,7 @@ let log_to_file_exn filename = match log_to_file filename with
    | `Error msg -> failwith msg
    | `Ok x -> x
 
+let log_to_file_mod_exn = log_to_file_exn
+
 let log_none = (module Dummy : S)
+let dummy = log_none

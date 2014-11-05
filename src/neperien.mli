@@ -120,3 +120,7 @@ module Dummy : S
 
 val log_to_file_mod : string -> (module S) or_error
 (** First-class module variant of {!log_to_file} *)
+
+val log_to_file_mod_exn : string -> (module S)
+
+val dummy : (module S)
