@@ -1,4 +1,7 @@
 S src
+S src/parse/
 B _build/src
+B _build/src/parse
 PKG bencode
+PKG bigarray
 FLAG -w +K,+Y,+X

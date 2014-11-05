@@ -12,6 +12,17 @@ AlphaFeatures: compiled_setup_ml
 
 Synopsis:    Causal logging
 
+Flag parse
+  Description:      build and install the log parser (depends on bigarray)
+  Default:          true
+
 Library "neperien"
   Path:             src
   Modules:          Neperien
+
+Library "neperien_parse"
+  Path:             src/parse/
+  Modules:          NeperienParse
+  FindlibName:      parse
+  FindlibParent:    neperien
+  BuildDepends:     bytes, bigarray, bencode, unix
