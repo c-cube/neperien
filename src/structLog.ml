@@ -74,33 +74,70 @@ let within t id f =
     ignore (Stack.pop t.stack);
     raise e
 
-(** {2 Encoding to/from B-Encode} *)
+(** {2 Encoding to file} *)
 
-let _encode oc e =
-  output_string oc "d6:causesl";
+type encoding =
+  | Binary
+  | Bencode
+
+(* format: Bencode dictionary
+  "c": list int  (causes IDs)
+  "d": string (description)
+  "i": int (id)
+  "w": optional int (within, parent event)
+  *)
+let _encode_bencode oc e =
+  output_string oc "d1:cl";
   List.iter (fun id -> Printf.fprintf oc "i%de" id) e.causes;
-  Printf.fprintf oc "e5:descr%d:%s" (String.length e.descr) e.descr;
-  Printf.fprintf oc "2:idi%de" e.id;
+  Printf.fprintf oc "e1:d%d:%s" (String.length e.descr) e.descr;
+  Printf.fprintf oc "1:ii%de" e.id;
   begin match e.within with
     | None -> ()
-    | Some id -> Printf.fprintf oc "6:withini%de" id
+    | Some id -> Printf.fprintf oc "1:wi%de" id
   end;
   output_char oc 'e'
 
+(* format:
+  id:int          = unique ID
+  n:int           = size of list of causes
+  int_1,...,int_n = list of causes
+  d:int           = size of descr, in bytes
+  string          = description (length d)
+  w:int           = 0 if no "within" | the ID of context
+*)
+let _encode_binary oc e =
+  assert (e.id > 0);
+  output_binary_int oc e.id;
+  output_binary_int oc (List.length e.causes);
+  List.iter (output_binary_int oc) e.causes;
+  output_binary_int oc (String.length e.descr);
+  output_string oc e.descr;
+  match e.within with
+    | None -> output_binary_int oc 0
+    | Some i -> assert (i!=0); output_binary_int oc i
+
 (** {2 Log to a File} *)
 
-let log_to_file filename =
+let log_to_file ?(encoding=Binary) filename =
   try
-    let oc = open_out filename in
-    let on_event e = _encode oc e in
+    let oc = match encoding with
+      | Binary -> open_out_bin filename
+      | Bencode -> open_out filename
+    in
+    let on_event = match encoding with
+      | Binary -> (fun e -> _encode_binary oc e)
+      | Bencode -> (fun e -> _encode_bencode oc e)
+    in
     let on_close _ = flush oc; close_out_noerr oc in
+    (* NOTE: we start with id=1 to make binary encoding easier *)
     let t = { stack=Stack.create(); cur_id=1; on_event; on_close; } in
     Gc.finalise on_close t;
     `Ok t
   with e ->
     `Error (Printexc.to_string e)
 
-let log_to_file_exn filename = match log_to_file filename with
+let log_to_file_exn ?encoding filename =
+  match log_to_file ?encoding filename with
    | `Error msg -> failwith msg
    | `Ok x -> x
 

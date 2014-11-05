@@ -60,11 +60,16 @@ val within : t -> id -> (unit -> 'a) -> 'a
 
 (** {2 Log to a File} *)
 
-val log_to_file : string -> t or_error
-(** Open the given file in write mode, and in case of success,
-    returns a logger that will write every event to the file *)
+type encoding =
+  | Binary
+  | Bencode
 
-val log_to_file_exn : string -> t
+val log_to_file : ?encoding:encoding -> string -> t or_error
+(** Open the given file in write mode, and in case of success,
+    returns a logger that will write every event to the file
+    @param encoding how to encode events (default [Binary]) *)
+
+val log_to_file_exn : ?encoding:encoding -> string -> t
 (** Unsafe version of {!log_to_file}.
     @raise Failure if it can't open the file *)
 
