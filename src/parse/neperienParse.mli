@@ -35,6 +35,7 @@ type id
 
 val equal_id : id -> id -> bool
 val string_of_id : id -> string
+val pp_id : Buffer.t -> id -> unit
 
 type event = {
   id : id;

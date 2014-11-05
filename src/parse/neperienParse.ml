@@ -36,6 +36,7 @@ type id = int
 
 let equal_id (i:id) j = i=j
 let string_of_id = string_of_int
+let pp_id buf = Printf.bprintf buf "%d"
 
 type event = {
   id : id;

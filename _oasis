@@ -13,7 +13,11 @@ AlphaFeatures: compiled_setup_ml
 Synopsis:    Causal logging
 
 Flag parse
-  Description:      build and install the log parser (depends on bigarray)
+  Description:      build and install the log parser (depends on bencode)
+  Default:          true
+
+Flag indent
+  Description:      build and install the log indenter (depends on containers)
   Default:          true
 
 Library "neperien"
@@ -35,3 +39,10 @@ Executable "cat_neperien"
   Build$:           flag(parse)
   Install$:         flag(parse)
   BuildDepends:     neperien.parse
+
+Executable "indent_neperien"
+  Path:             src/tools/
+  MainIs:           indent_neperien.ml
+  Build$:           flag(parse)
+  Install$:         flag(parse)
+  BuildDepends:     neperien.parse, containers, containers.misc

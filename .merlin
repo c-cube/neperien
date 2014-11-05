@@ -7,4 +7,6 @@ B _build/src/tools/
 PKG bencode
 PKG bigarray
 PKG unix
+PKG containers
+PKG containers.misc
 FLAG -w +K,+Y,+X
