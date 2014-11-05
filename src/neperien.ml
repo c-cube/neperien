@@ -102,6 +102,7 @@ module MakeFile(F : sig
 end) = struct
   (* open file *)
   let oc = open_out_gen [Open_append; Open_creat; Open_trunc] 0o644 F.filename
+  let max_level = ref max_int
 
   let stack : stack_cell list ref = ref []
   let stack_len = ref 0
@@ -110,6 +111,7 @@ end) = struct
     flush oc;
     close_out_noerr oc
   let close() = _close oc
+  let set_max_level l = max_level := l
   let emit_event e = _encode_bencode oc e
 
   let _prev () = match !stack with
@@ -129,7 +131,7 @@ end) = struct
 
   let send ?(causes=[]) descr =
     let e = _make causes descr None in
-    emit_event e;
+    if e.level <= !max_level then emit_event e;
     e.id
 
   let send_b ?causes fmt =
@@ -163,7 +165,7 @@ end) = struct
       let last_child = sc.cur_child in
       let e = _make causes msg last_child in
       (*  emit now, the event is complete *)
-      emit_event e;
+      if e.level <= !max_level then emit_event e;
       x, e.id
     with ex ->
       ignore (_pop level);
@@ -198,7 +200,7 @@ end) = struct
       let last_child = sc.cur_child in
       let e = _make causes msg last_child in
       (*  emit now, the event is complete *)
-      emit_event e;
+      if e.level <= !max_level then emit_event e;
       e.id
 
     let within_exit_b level ?causes fmt =
@@ -227,6 +229,7 @@ module Dummy = struct
   let close() = ()
   let _id = 1
   let _buf = Buffer.create 1 (* dummy *)
+  let set_max_level _ = ()
 
   (* safety checks *)
   let _level = ref 0

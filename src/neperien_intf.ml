@@ -53,6 +53,9 @@ module type S = sig
 
   val close : unit -> unit
 
+  val set_max_level : int -> unit
+  (** Any message whose level is above this one will be ignored *)
+
   module Unsafe : sig
     val within_enter : unit -> level
     (** Enter a "within" context, same as {!within}. {b Note}: careful,
