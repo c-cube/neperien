@@ -64,6 +64,13 @@ val iter_below : t -> level:int -> event sequence
 (** [iter_above log ~level] iterates only on events whose level is [<= level],
     jumping over more detailed logs. *)
 
+val iter_from : t -> event -> event sequence
+(** [iter log e] iterates event starting from [e], excluded. *)
+
+val iter_from_prev : t -> event -> event sequence
+(** [iter_prev log e] iterates event in reversed order starting
+    from [e], excluded. It only iterates on the same level. *)
+
 val iter_children : t -> event -> event sequence
 (** Iterate on direct children of the given event, in {b reverse} order (last
     child first). *)
