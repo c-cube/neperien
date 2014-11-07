@@ -48,3 +48,10 @@ Executable "indent_neperien"
   Build$:           flag(parse)
   Install$:         flag(parse)
   BuildDepends:     neperien.parse, containers, containers.misc
+
+Executable "random_neperien"
+  Path:             src/tools/
+  MainIs:           random_neperien.ml
+  CompiledObject:   native
+  Install:          false
+  BuildDepends:     neperien
