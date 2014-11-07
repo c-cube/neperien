@@ -131,13 +131,23 @@ let iter_below log ~level k =
   assert (level >= 0);
   iter log (fun e -> if e.level <= level then k e)
 
-let rec _iter_prev log e k = match e.prev with
+let iter_from log e k =
+  (* Positioning at e.id, We throw the value away. *)
+  let _ = _parse_bencode log e.id in
+  try while true do
+    let b = _parse_next_bencode log in
+    let e = _ev_of_bencode b in
+    k e
+    done
+  with Parsing.Parse_error -> ()
+
+let rec iter_from_prev log e k = match e.prev with
   | None -> ()
   | Some id ->
       let b = _parse_bencode log id in
       let e' = _ev_of_bencode b in
       k e';
-      _iter_prev log e' k
+      iter_from_prev log e' k
 
 let iter_children log e k = match e.last_child with
   | None -> ()
@@ -145,7 +155,7 @@ let iter_children log e k = match e.last_child with
       let b = _parse_bencode log id in
       let e' = _ev_of_bencode b in
       k e';
-      _iter_prev log e' k
+      iter_from_prev log e' k
 
 (** {2 Open file} *)
 
