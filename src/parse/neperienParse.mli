@@ -27,6 +27,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 (** {1 Read a Log file} *)
 
 type 'a sequence = ('a -> unit) -> unit
+type 'a gen = unit -> 'a option
 type 'a or_error = [`Ok of 'a | `Error of string]
 
 (** {2 Main Types} *)
@@ -74,6 +75,21 @@ val iter_from_prev : t -> event -> event sequence
 val iter_children : t -> event -> event sequence
 (** Iterate on direct children of the given event, in {b reverse} order (last
     child first). *)
+
+val gen : t -> event gen
+(** Generator of events *)
+
+val gen_below : t -> level:int -> event gen
+(** Events whose level is <= to the given one *)
+
+val gen_from : t -> event -> event gen
+(** See {!iter_from} *)
+
+val gen_from_prev : t -> event -> event gen
+(** See {!iter_from_prev} *)
+
+val gen_children : t -> event -> event gen
+(** See {!iter_children} *)
 
 (** {2 Open file} *)
 

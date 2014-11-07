@@ -27,6 +27,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 (** {1 Read a Log file} *)
 
 type 'a sequence = ('a -> unit) -> unit
+type 'a gen = unit -> 'a option
 type 'a or_error = [`Ok of 'a | `Error of string]
 
 (** {2 Main Types} *)
@@ -57,12 +58,12 @@ type t = {
 }
 
 (* parse a bencode value at offset i in file t.chan *)
-let _parse_bencode t i =
+let parse_bencode_ t i =
   seek_in t.chan i;
   Lexing.flush_input t.lexbuf;
   Bencode_parse.bencode Bencode_lex.bencode t.lexbuf
 
-let _parse_next_bencode t =
+let parse_next_bencode_ t =
   Bencode_parse.bencode Bencode_lex.bencode t.lexbuf
 
 let _unwrap_exn msg o = match o with
@@ -82,7 +83,7 @@ let get_l get b = match b with
   | B.List l' -> List.map get l'
   | _ -> failwith "expected list"
 
-let _ev_of_bencode b = match b with
+let ev_of_bencode_ b = match b with
   | B.Dict l ->
       let id = get_int (get_field "i" l) in
       let descr = get_str (get_field "d" l) in
@@ -97,8 +98,8 @@ let _ev_of_bencode b = match b with
   | _ -> failwith "expected dict"
 
 let by_id_exn log id =
-  let b = _parse_bencode log id in
-  _ev_of_bencode b
+  let b = parse_bencode_ log id in
+  ev_of_bencode_ b
 
 let by_id log id =
   try Some (by_id_exn log id)
@@ -111,7 +112,7 @@ let iter log k =
   let log' = {log with chan; lexbuf; } in
   try
     (* read header *)
-    let b = _parse_next_bencode log' in
+    let b = parse_next_bencode_ log' in
     begin match b with
       | B.Integer 1 -> ()
       | B.Integer v -> failwith ("unknown version: " ^ string_of_int v)
@@ -119,8 +120,8 @@ let iter log k =
     end;
     (* traverse *)
     while true do
-      let b = _parse_next_bencode log' in
-      let e = _ev_of_bencode b in
+      let b = parse_next_bencode_ log' in
+      let e = ev_of_bencode_ b in
       k e
     done
   with
@@ -133,10 +134,10 @@ let iter_below log ~level k =
 
 let iter_from log e k =
   (* Positioning at e.id, We throw the value away. *)
-  let _ = _parse_bencode log e.id in
+  let _ = parse_bencode_ log e.id in
   try while true do
-    let b = _parse_next_bencode log in
-    let e = _ev_of_bencode b in
+    let b = parse_next_bencode_ log in
+    let e = ev_of_bencode_ b in
     k e
     done
   with Parsing.Parse_error -> ()
@@ -144,18 +145,87 @@ let iter_from log e k =
 let rec iter_from_prev log e k = match e.prev with
   | None -> ()
   | Some id ->
-      let b = _parse_bencode log id in
-      let e' = _ev_of_bencode b in
+      let b = parse_bencode_ log id in
+      let e' = ev_of_bencode_ b in
       k e';
       iter_from_prev log e' k
 
 let iter_children log e k = match e.last_child with
   | None -> ()
   | Some id ->
-      let b = _parse_bencode log id in
-      let e' = _ev_of_bencode b in
+      let b = parse_bencode_ log id in
+      let e' = ev_of_bencode_ b in
       k e';
       iter_from_prev log e' k
+
+let gen log =
+  (* duplicate log reader *)
+  let chan = open_in log.filename in
+  let lexbuf = Lexing.from_channel chan in
+  let log' = {log with chan; lexbuf; } in
+  (* read header *)
+  let b = parse_next_bencode_ log' in
+  begin match b with
+    | B.Integer 1 -> ()
+    | B.Integer v -> failwith ("unknown version: " ^ string_of_int v)
+    | _ -> failwith "expected version header"
+  end;
+  let stop = ref false in
+  fun () ->
+    if !stop then None
+    else try
+      let b = parse_next_bencode_ log' in
+      let e = ev_of_bencode_ b in
+      Some e
+    with
+    | Parsing.Parse_error ->
+        close_in chan;
+        stop := true;
+        None (* end of file.. *)
+    | e -> close_in chan; raise e
+
+let gen_below log ~level =
+  let g = gen log in
+  let rec next_ () =
+    match g() with
+    | Some e as res when e.level <= level -> res
+    | Some _ -> next_()
+    | None -> None
+  in next_
+
+let gen_from log e =
+  let _ = parse_bencode_ log e.id in
+  let stop = ref false in
+  fun () ->
+    if !stop then None
+    else try
+      let b = parse_next_bencode_ log in
+      let e = ev_of_bencode_ b in
+      Some e
+    with Parsing.Parse_error ->
+      stop := true; None
+
+let gen_from_prev log e =
+  let cur = ref e in
+  fun () -> match (!cur).prev with
+    | None -> None
+    | Some id ->
+      let b = parse_bencode_ log id in
+      let e' = ev_of_bencode_ b in
+      cur := e';
+      Some e'
+
+let gen_children log e = match e.last_child with
+  | None -> (fun() -> None)
+  | Some id ->
+      let b = parse_bencode_ log id in
+      let e' = ev_of_bencode_ b in
+      let first = ref true in
+      let tail = gen_from_prev log e' in
+      fun () ->
+        if !first
+        then (first:=false; Some e')
+        else tail()
 
 (** {2 Open file} *)
 
