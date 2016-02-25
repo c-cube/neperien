@@ -1,8 +1,9 @@
 OASISFormat: 0.4
-Name:        causal
+Name:        neperien
 Version:     0.4
-Homepage:    https://github.com/c-cube/causal
+Homepage:    https://github.com/c-cube/neperien
 Authors:     Simon Cruanes
+             Guillaume Bury <guillaume.bury@gmail.com>
 License:     BSD-2-clause
 LicenseFile: LICENSE
 Plugins:     META (0.3), DevFiles (0.3)
@@ -10,7 +11,7 @@ OCamlVersion: >= 4.00.1
 BuildTools:  ocamlbuild
 AlphaFeatures: compiled_setup_ml
 
-Synopsis:    Causal logging
+Synopsis:    Hierarchical logging
 
 Flag parse
   Description:      build and install the log parser (depends on bencode)
@@ -40,14 +41,6 @@ Executable "cat_neperien"
   Build$:           flag(parse)
   Install$:         flag(parse)
   BuildDepends:     neperien.parse
-
-Executable "indent_neperien"
-  Path:             src/tools/
-  MainIs:           indent_neperien.ml
-  CompiledObject:   native
-  Build$:           flag(parse)
-  Install$:         flag(parse)
-  BuildDepends:     neperien.parse, containers, containers.misc
 
 Executable "random_neperien"
   Path:             src/tools/
