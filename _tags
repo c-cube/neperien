@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 9d673b99454d6ce5a2ef2c5df15cc585)
+# DO NOT EDIT (digest: 0d6235e5743b9f1de3e58b7801c7f34a)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -20,15 +20,27 @@ true: annot, bin_annot
 "src/parse/neperien_parse.cmxs": use_neperien_parse
 <src/parse/*.ml{,i,y}>: package(bencode)
 <src/parse/*.ml{,i,y}>: package(bytes)
+# Executable logn
+"src/bin/logn.native": package(bencode)
+"src/bin/logn.native": package(bytes)
+"src/bin/logn.native": package(lwt)
+"src/bin/logn.native": package(lwt.ppx)
+"src/bin/logn.native": package(notty)
+"src/bin/logn.native": package(notty.lwt)
+"src/bin/logn.native": use_neperien_parse
+<src/bin/*.ml{,i,y}>: package(lwt)
+<src/bin/*.ml{,i,y}>: package(lwt.ppx)
+<src/bin/*.ml{,i,y}>: package(notty)
+<src/bin/*.ml{,i,y}>: package(notty.lwt)
 # Executable cat_neperien
-"src/tools/cat_neperien.native": package(bencode)
-"src/tools/cat_neperien.native": package(bytes)
-"src/tools/cat_neperien.native": use_neperien_parse
-<src/tools/*.ml{,i,y}>: package(bencode)
-<src/tools/*.ml{,i,y}>: package(bytes)
-<src/tools/*.ml{,i,y}>: use_neperien_parse
+"src/bin/cat_neperien.native": package(bencode)
+"src/bin/cat_neperien.native": package(bytes)
+"src/bin/cat_neperien.native": use_neperien_parse
+<src/bin/*.ml{,i,y}>: package(bencode)
+<src/bin/*.ml{,i,y}>: package(bytes)
+<src/bin/*.ml{,i,y}>: use_neperien_parse
 # Executable random_neperien
-"src/tools/random_neperien.native": use_neperien
-<src/tools/*.ml{,i,y}>: use_neperien
+"src/bin/random_neperien.native": use_neperien
+<src/bin/*.ml{,i,y}>: use_neperien
 # OASIS_STOP
 <**/*.ml>: warn_K, warn_Y, warn_X

@@ -34,8 +34,16 @@ Library "neperien_parse"
   Install$:         flag(parse)
   BuildDepends:     bytes, bencode
 
+Executable "logn"
+  Path:             src/bin/
+  MainIs:           logn.ml
+  CompiledObject:   native
+  Build$:           flag(parse)
+  Install$:         flag(parse)
+  BuildDepends:     neperien.parse, notty, notty.lwt, lwt, lwt.ppx
+
 Executable "cat_neperien"
-  Path:             src/tools/
+  Path:             src/bin/
   MainIs:           cat_neperien.ml
   CompiledObject:   native
   Build$:           flag(parse)
@@ -43,7 +51,7 @@ Executable "cat_neperien"
   BuildDepends:     neperien.parse
 
 Executable "random_neperien"
-  Path:             src/tools/
+  Path:             src/bin/
   MainIs:           random_neperien.ml
   CompiledObject:   native
   Install:          false

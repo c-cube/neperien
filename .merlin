@@ -4,9 +4,14 @@ S src/tools/
 B _build/src
 B _build/src/parse
 B _build/src/tools/
+
+PKG lwt
+PKG lwt.ppx
+PKG notty
 PKG bencode
 PKG bigarray
 PKG unix
 PKG containers
-PKG containers.misc
+
+
 FLAG -w +K,+Y,+X
