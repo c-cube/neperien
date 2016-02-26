@@ -22,6 +22,7 @@ type cell = {
 }
 
 type t = {
+  mutable closed : bool;
   filename : string;
   out : out_channel;
   mutable max_level : int;
@@ -29,30 +30,6 @@ type t = {
   mutable stack : cell list;
 }
 
-let close t =
-  flush t.out;
-  close_out_noerr t.out
-
-let mk filename =
-  let out = open_out_gen [Open_append; Open_creat; Open_trunc] 0o644 filename in
-  (* start values *)
-  let stack = [] in
-  let stack_len = 0 in
-  let max_level = max_int in
-  let t = { filename; out; stack_len; stack; max_level; } in
-  (* initialization *)
-  Gc.finalise close t;
-  H.encode out (H.mk ());
-  (* Return value *)
-  t
-
-let log_to_file_exn = mk
-
-let log_to_file f =
-  try
-    `Ok (log_to_file_exn f)
-  with e ->
-    `Error (Printexc.to_string e)
 
 (*
    ### Actual logging
@@ -188,3 +165,40 @@ module Unsafe = struct
       buf fmt
 end
 
+(*
+   ### Logger creation
+   Delayed until the end of the file because we need to do some operations
+   inorder to ensure that the root of the events can be accessed
+*)
+
+let close t =
+  if not t.closed then begin
+    ignore (Unsafe.within_exit t 1 "")
+  end;
+  flush t.out;
+  close_out_noerr t.out;
+  t.closed <- true
+
+let mk filename =
+  let out = open_out_gen [Open_append; Open_creat; Open_trunc] 0o644 filename in
+  (* start values *)
+  let closed = false in
+  let stack = [] in
+  let stack_len = 0 in
+  let max_level = max_int in
+  let t = { closed; filename; out; stack_len; stack; max_level; } in
+  (* initialization *)
+  H.encode out (H.mk ());
+  let l = Unsafe.within_enter t in
+  assert (l = 1);
+  Gc.finalise close t;
+  (* Return value *)
+  t
+
+let log_to_file_exn = mk
+
+let log_to_file f =
+  try
+    `Ok (log_to_file_exn f)
+  with e ->
+    `Error (Printexc.to_string e)

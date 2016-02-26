@@ -41,7 +41,7 @@ Executable "logn"
   CompiledObject:   native
   Build$:           flag(parse)
   Install$:         flag(parse)
-  BuildDepends:     neperien.parse, notty, notty.lwt, lwt, lwt.ppx
+  BuildDepends:     neperien.parse, notty, notty.lwt, lwt, lwt.ppx, containers
 
 Executable "cat_neperien"
   Path:             src/bin/

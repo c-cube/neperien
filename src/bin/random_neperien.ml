@@ -44,7 +44,8 @@ and rand_deep log len st =
 let process_file st file len =
   if file="" then failwith "file required";
   let log = N.log_to_file_exn file in
-  random_log log len st
+  random_log log len st;
+  N.close log
 
 let file = ref ""
 let add_file f = file := f

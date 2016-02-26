@@ -72,6 +72,31 @@ let by_id log id =
   try Some (by_id_exn log id)
   with Failure _ -> None
 
+(* Find the root of a log, i.e the last event.
+   Currently not very eficient. *)
+let root_exn t =
+  let log = fresh t in
+  let _ = parse_header log in
+  let x = ref None in
+  try
+    while true do
+      x := Some (parse_next_bencode log)
+    done;
+    assert false
+  with
+  | Parsing.Parse_error ->
+    close_in log.chan;
+    begin match !x with
+      | None -> failwith "empty log"
+      | Some b -> E.decode b
+    end
+  | e ->
+    close_in log.chan; raise e
+
+let root t =
+  try Some (root_exn t)
+  with Failure _ -> None
+
 (*
    ### Iterators
    Give iterators to more easily access bundle of events

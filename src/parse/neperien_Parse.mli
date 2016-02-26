@@ -24,6 +24,12 @@ val close : t -> unit
 
 (** {2 Direct Access} *)
 
+val root : t -> Neperien_Event.t option
+(** Returns the root of a log file. *)
+
+val root_exn : t -> Neperien_Event.t
+(* @raise Failure if the root can't be found *)
+
 val by_id : t -> Neperien_Event.id -> Neperien_Event.t option
 (** Access an event by its ID within the file. Performs IO. *)
 
