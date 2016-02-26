@@ -1,5 +1,7 @@
 
-module P = NeperienParse
+(* This file is free software, part of Neperien. See file "LICENSE" for more details. *)
+
+module P = Neperien_Parse
 
 let cat parse =
   let open Notty in

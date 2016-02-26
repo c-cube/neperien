@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 0d6235e5743b9f1de3e58b7801c7f34a)
+# DO NOT EDIT (digest: 2a0a82a1744a89e606b5d242c9622791)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,10 +16,12 @@ true: annot, bin_annot
 "_darcs": not_hygienic
 # Library neperien
 "src/neperien.cmxs": use_neperien
+<src/*.ml{,i,y}>: package(bencode)
 # Library neperien_parse
 "src/parse/neperien_parse.cmxs": use_neperien_parse
 <src/parse/*.ml{,i,y}>: package(bencode)
 <src/parse/*.ml{,i,y}>: package(bytes)
+<src/parse/*.ml{,i,y}>: use_neperien
 # Executable logn
 "src/bin/logn.native": package(bencode)
 "src/bin/logn.native": package(bytes)
@@ -27,6 +29,7 @@ true: annot, bin_annot
 "src/bin/logn.native": package(lwt.ppx)
 "src/bin/logn.native": package(notty)
 "src/bin/logn.native": package(notty.lwt)
+"src/bin/logn.native": use_neperien
 "src/bin/logn.native": use_neperien_parse
 <src/bin/*.ml{,i,y}>: package(lwt)
 <src/bin/*.ml{,i,y}>: package(lwt.ppx)
@@ -35,12 +38,14 @@ true: annot, bin_annot
 # Executable cat_neperien
 "src/bin/cat_neperien.native": package(bencode)
 "src/bin/cat_neperien.native": package(bytes)
+"src/bin/cat_neperien.native": use_neperien
 "src/bin/cat_neperien.native": use_neperien_parse
-<src/bin/*.ml{,i,y}>: package(bencode)
 <src/bin/*.ml{,i,y}>: package(bytes)
 <src/bin/*.ml{,i,y}>: use_neperien_parse
 # Executable random_neperien
+"src/bin/random_neperien.native": package(bencode)
 "src/bin/random_neperien.native": use_neperien
+<src/bin/*.ml{,i,y}>: package(bencode)
 <src/bin/*.ml{,i,y}>: use_neperien
 # OASIS_STOP
 <**/*.ml>: warn_K, warn_Y, warn_X

@@ -1,32 +1,9 @@
 
-(*
-copyright (c) 2014, simon cruanes
-all rights reserved.
-
-redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-redistributions of source code must retain the above copyright notice, this
-list of conditions and the following disclaimer.  redistributions in binary
-form must reproduce the above copyright notice, this list of conditions and the
-following disclaimer in the documentation and/or other materials provided with
-the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*)
+(* This file is free software, part of Neperien. See file "LICENSE" for more details. *)
 
 (** {1 Tool that generates random logs} *)
 
-module N = Neperien
+module N = Neperien.Emit
 module RS = Random.State
 
 let choice_ st a =
@@ -50,10 +27,12 @@ let rec random_log log len st =
   if len=0 then ()
   else if len=1 then rand_flat log len st
   else choice_ st [| rand_flat log len; rand_deep log len |]
+
 and rand_flat log len st =
   let msg = choice_ st messages_ in
   N.send' log msg;
   random_log log (len-1) st
+
 and rand_deep log len st =
   assert (len>=2);
   let msg = choice_ st messages_ in
@@ -73,9 +52,9 @@ let len = ref 10_000
 let seed = ref 0xdeadbeef
 
 let args = Arg.align
-  [ "-n", Arg.Set_int len, " number of messages"
-  ; "-seed", Arg.Set_int seed, " random seed"
-  ]
+    [ "-n", Arg.Set_int len, " number of messages"
+    ; "-seed", Arg.Set_int seed, " random seed"
+    ]
 
 let () =
   Arg.parse args add_file "usage: random_neperien <file> [options]...";

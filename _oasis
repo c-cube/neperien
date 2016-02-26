@@ -18,21 +18,22 @@ Flag parse
   Default:          true
 
 Flag indent
-  Description:      build and install the log indenter (depends on containers)
+  Description:      build and install the log reader (depends on containers)
   Default:          true
 
 Library "neperien"
   Path:             src
-  Modules:          Neperien, Neperien_intf
+  Modules:          Neperien, Neperien_Event, Neperien_Header, Neperien_Emit
+  BuildDepends:     bencode
 
 Library "neperien_parse"
   Path:             src/parse/
-  Modules:          NeperienParse
+  Modules:          Neperien_Parse
   FindlibName:      parse
   FindlibParent:    neperien
   Build$:           flag(parse)
   Install$:         flag(parse)
-  BuildDepends:     bytes, bencode
+  BuildDepends:     neperien, bytes, bencode
 
 Executable "logn"
   Path:             src/bin/
