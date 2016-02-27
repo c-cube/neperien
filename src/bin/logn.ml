@@ -5,38 +5,241 @@ module P = Neperien_Parse
 module E = Neperien_Event
 
 (*
+   ### Control keys
+*)
+
+let pad s l =
+  assert (String.length s <= l);
+  let b = Bytes.make l ' ' in
+  Bytes.blit_string s 0 b 0 (String.length s);
+  Bytes.unsafe_to_string b
+
+let align_magic l =
+  let max = List.fold_left (fun i (_, s) ->
+      max i (String.length s)) 0 l + 1 in
+  List.map (fun (x, y) -> (x ^ " ", pad y max)) l
+
+let ctrl_keys = align_magic [
+    "Esc/q",      "Quit";
+    "Enter",      "Expand";
+    "Backspace",  "Retract";
+    "t",          "Toggle";
+    "a",          "Analyse";
+  ]
+
+(*
    ### State
    Current state of the log reader
 *)
 
-type 'a plist = {
-  start : int;
-  vec : 'a CCVector.vector;
-}
 
-let _empty () = {
-  start = 0;
-  vec = CCVector.create ();
-}
+type cursor =
+  | Context of int
+  | Current of int
+
+type mode =
+  | Causal
+  | Hierarchy
 
 type state = {
+
   parse : P.t;
-  context : E.t plist;
-  children : E.t plist;
+  filename : string;
+
+  mode : mode;
+
+  mutable cursor : cursor;
+  mutable full_display : bool;
+
+  context : E.t CCVector.vector;
+  mutable context_start : int;
+
+  current : E.t CCVector.vector;
+  mutable current_first : int;
+  mutable current_last : int;
 }
 
 let mk filename = {
+  filename;
   parse = P.open_file_exn filename;
-  context = _empty ();
-  children = _empty ();
+  mode = Hierarchy;
+  cursor = Context 0;
+  full_display = false;
+
+  context = CCVector.create ();
+  context_start = -1;
+
+  current = CCVector.create ();
+  current_first = -1;
+  current_last = -1;
 }
+
+let set_cursor st c =
+  st.cursor <- c;
+  match c with
+  | Context i ->
+    st.context_start <- min i st.context_start
+  | Current i ->
+    st.current_first <- max i st.current_first;
+    st.current_last <- min i st.current_last
+
+let refresh_current st =
+  let e = CCVector.get st.context (CCVector.length st.context - 1) in
+  CCVector.clear st.current;
+  let iter = match st.mode with
+    | Hierarchy -> P.iter_children st.parse e
+    | Causal -> assert false
+  in
+  CCVector.append_seq st.current iter;
+  st.current_first <- CCVector.length st.current - 1;
+  st.current_last <- -1
+
+let add_ctx st e =
+  CCVector.push st.context e;
+  set_cursor st (Context (CCVector.length st.context - 1));
+  refresh_current st
+
+let set_ctx st = function
+  | Context i as c ->
+    set_cursor st c;
+    CCVector.shrink st.context (i + 1);
+    refresh_current st
+  | Current i ->
+    add_ctx st (CCVector.get st.current i)
+
+let reset st e =
+  CCVector.clear st.context;
+  st.context_start <- 0;
+  add_ctx st e
+
+let init st =
+  match P.root st.parse with
+  | None -> raise Exit
+  | Some r -> reset st { r with E.descr = "root"; }
+
+let expand st = set_ctx st st.cursor
+
+let rollback st =
+  set_ctx st (Context (
+      max 0 (CCVector.length st.context - 2)))
+
+let move_cursor_up st =
+  match st.cursor with
+  | Context i ->
+    set_cursor st (Context (max 0 (i - 1)))
+  | Current i when i >= CCVector.length st.current - 1 ->
+    set_cursor st (Context (CCVector.length st.context - 1))
+  | Current i ->
+    set_cursor st (Current (i + 1))
+
+let move_cursor_down st =
+  match st.cursor with
+  | Context i when i >= CCVector.length st.context - 1 ->
+    set_cursor st (Current (CCVector.length st.current - 1))
+  | Context i ->
+    set_cursor st (Context (i + 1))
+  | Current i ->
+    set_cursor st (Current (max 0 (i - 1)))
 
 (*
    ### Rendering
 *)
 
-let img _ (_, _) =
-  Notty.(I.string A.empty "Hello world!")
+let bg_blue = Notty.A.(bg blue ++ fg black ++ st bold)
+let bg_black = Notty.A.(bg black ++ fg white ++ st bold)
+let bg_yellow = Notty.A.(bg yellow ++ fg white ++ st bold)
+
+let render_header st (w, h) =
+  let header_s = Printf.sprintf "File: %s (%s) " st.filename (
+      match st.mode with Causal -> "causes" | Hierarchy -> "hierarchy"
+    ) in
+  let header_s_len = String.length header_s in
+  Notty.I.(
+    string bg_black header_s <|>
+    string bg_blue (String.make (w - header_s_len) ' ') <->
+    string bg_black (Printf.sprintf "context: %d (%d) --- current: %d/%d (%d)"
+                       st.context_start (CCVector.length st.context)
+                       st.current_first st.current_last (CCVector.length st.current)))
+
+let render_footer (w, h) =
+  let img = List.fold_left (fun i (k, s) ->
+      Notty.I.(i <|> string bg_black k <|> string bg_blue s))
+      Notty.I.empty ctrl_keys in
+  let w' = Notty.I.width img in
+  if w' < w then
+    Notty.I.(img <|> string bg_blue (String.make (w - w') ' '))
+  else
+    img
+
+let render_event ~highlight ~full_display e w =
+  let attr = if highlight then bg_yellow else bg_black in
+  let s = Printf.sprintf "[%d] %s" e.E.id e.E.descr in
+  Notty.I.string attr s
+
+let render_context st (h, w) =
+  let full_display = st.full_display in
+  let cursor = match st.cursor with
+    | Context i -> i
+    | _ -> -1
+  in
+  let img = ref Notty.I.empty in
+  for index = st.context_start to CCVector.length st.context - 1 do
+    let highlight = index = cursor in
+    let e = CCVector.get st.context index in
+    img := Notty.I.(!img <-> (render_event ~highlight ~full_display e w))
+  done;
+  !img
+
+let render_current st (h, w) =
+  if CCVector.is_empty st.current then
+    Notty.I.(string bg_black "<empty>")
+  else begin
+    let highlight, start = match st.cursor with
+      | Current i -> true, i
+      | _ -> false, st.current_first
+    in
+    let full_display = highlight && st.full_display in
+    let img = ref (
+        render_event ~highlight ~full_display
+          (CCVector.get st.current start) w)
+    in
+    let highlight = false in
+    let full_display = false in
+    let h' = Notty.I.height !img in
+    let space = max 0 (h - h') in
+    let first = min st.current_first (start + space) in
+    let space = max 0 (space - (first - start)) in
+    let last = max 0 (start - space) in
+    for index = start + 1 to first do
+      let e = CCVector.get st.current index in
+      img := Notty.I.((render_event ~highlight ~full_display e w) <-> !img)
+    done;
+    for index = start - 1 downto last do
+      let e = CCVector.get st.current index in
+      img := Notty.I.(!img <-> (render_event ~highlight ~full_display e w))
+    done;
+    st.current_first <- first;
+    st.current_last <- last;
+    !img
+  end
+
+let render_st st (h, w) =
+  let ctx = render_context st (h, w) in
+  let ctx_h = Notty.I.height ctx in
+  let cur = render_current st (h - ctx_h, w - 1) in
+  Notty.I.(ctx <-> (pad ~l:1 cur))
+
+let img st (w, h) =
+  let header = render_header st (w, h) in
+  let header_h = Notty.I.height header in
+  let footer = render_footer (w, h) in
+  let footer_h = Notty.I.height footer in
+  let body = render_st st (h - header_h - footer_h - 1, w - 1) in
+  Notty.I.(
+    (vpad (max 0 @@ h - footer_h) 0 footer)
+    </>
+    (header <-> pad ~l:1 ~t:1 body)
+  )
 
 let render st term =
   Notty_lwt.Term.image term (img st (Notty_lwt.Term.size term))
@@ -45,14 +248,26 @@ let render st term =
    ### Interface even handling
 *)
 
-let react _ = function
-  | _ -> ()
+let update st = function
+  | `Key (`Arrow `Up, _) ->
+    move_cursor_up st;
+    Lwt.return_unit
+  | `Key (`Arrow `Down, _) ->
+    move_cursor_down st;
+    Lwt.return_unit
+  | `Key (`Enter, _) ->
+    expand st;
+    Lwt.return_unit
+  | `Key (`Backspace, _) ->
+    rollback st;
+    Lwt.return_unit
+  | _ -> Lwt.return_unit
 
 let handle st term = function
   | `Key (`Escape, _) | `Key (`Uchar 113, _) (* 'q' *) ->
     Notty_lwt.Term.release term
   | event ->
-    react st event;
+    let%lwt () = update st event in
     render st term
 
 (*
@@ -60,18 +275,18 @@ let handle st term = function
 *)
 
 let main filename =
-  Lwt_main.run @@
+  let st = mk filename in
+  let () = init st in
   let term = Notty_lwt.Term.create () in
   let _ = Lwt_unix.on_signal Sys.sigint (fun _ ->
       Lwt_main.run @@ Notty_lwt.Term.release term) in
-  let st = mk filename in
+  Lwt_main.run @@
   let%lwt () = render st term in
   Lwt_stream.iter_s (handle st term) (Notty_lwt.Term.events term)
 
 let argspec = Arg.align []
 
-let usage =
-  "./logn file"
+let usage = "./logn file"
 
 let () =
   let file = ref "" in
