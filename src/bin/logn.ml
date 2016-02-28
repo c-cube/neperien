@@ -47,9 +47,11 @@ type state = {
   filename : string;
 
   mode : mode;
+  mutable full_display : bool;
+
+  stack : (cursor * int * int) CCVector.vector;
 
   mutable cursor : cursor;
-  mutable full_display : bool;
 
   context : E.t CCVector.vector;
   mutable context_start : int;
@@ -60,11 +62,16 @@ type state = {
 }
 
 let mk filename = {
+
   filename;
   parse = P.open_file_exn filename;
+
   mode = Hierarchy;
-  cursor = Context 0;
   full_display = false;
+
+  stack = CCVector.create ();
+
+  cursor = Context 0;
 
   context = CCVector.create ();
   context_start = -1;
@@ -84,10 +91,15 @@ let set_cursor st c =
     st.context_start <- min i st.context_start
   | Current i ->
     let l = CCVector.length st.current - 1 in
+    if not (i >= 0 && i <= l) then
+      failwith (
+        Printf.sprintf "%d is not a valid index" i);
+
     if i = l - 1 then
       st.current_first <- l
     else
       st.current_first <- max i st.current_first;
+
     if i = 1 then
       st.current_last <- 0
     else
@@ -102,9 +114,10 @@ let refresh_current st =
   in
   CCVector.append_seq st.current iter;
   st.current_first <- CCVector.length st.current - 1;
-  st.current_last <- -1
+  st.current_last <- 0
 
 let add_ctx st e =
+  CCVector.push st.stack (st.cursor, st.current_first, st.current_last);
   CCVector.push st.context e;
   set_cursor st (Context (CCVector.length st.context - 1));
   refresh_current st
@@ -112,6 +125,7 @@ let add_ctx st e =
 let set_ctx st = function
   | Context i as c ->
     set_cursor st c;
+    CCVector.shrink st.stack (i + 1);
     CCVector.shrink st.context (i + 1);
     refresh_current st
   | Current i ->
@@ -130,8 +144,16 @@ let init st =
 let expand st = set_ctx st st.cursor
 
 let rollback st =
-  set_ctx st (Context (
-      max 0 (CCVector.length st.context - 2)))
+  if CCVector.length st.context <= 1 then
+    set_ctx st (Context 0)
+  else begin
+    let i = CCVector.length st.context - 2 in
+    let (c, first, last) = CCVector.get st.stack (i + 1) in
+    set_ctx st (Context i);
+    st.current_first <- first;
+    st.current_last <- last;
+    set_cursor st c
+  end
 
 let move_cursor_up st =
   match st.cursor with
@@ -154,7 +176,8 @@ let move_cursor_up_up st =
 let move_cursor_down st =
   match st.cursor with
   | Context i when i >= CCVector.length st.context - 1 ->
-    set_cursor st (Current (CCVector.length st.current - 1))
+    if not (CCVector.is_empty st.current) then
+      set_cursor st (Current (CCVector.length st.current - 1))
   | Context i ->
     set_cursor st (Context (i + 1))
   | Current i ->
@@ -192,10 +215,14 @@ let render_header st (w, h) =
     else
       Notty.I.empty
   in
+  let cursor = Notty.I.(string bg_black (Printf.sprintf " Pointing at %s" (
+      match st.cursor with
+      | Context i -> Printf.sprintf "context(%d)" i
+      | Current i -> Printf.sprintf "current(%d)" i))) in
   Notty.I.(
     (string bg_black header_s <|> string bg_blue (String.make (w - header_s_len) ' '))
     <->
-    (nb_events <|> nb_displayed)
+    (nb_events <|> nb_displayed <|> cursor)
   )
 
 
@@ -328,8 +355,8 @@ let img st (w, h) =
     (header <-> pad ~l:1 ~t:1 body)
   )
 
-let render st term =
-  Notty_lwt.Term.image term (img st (Notty_lwt.Term.size term))
+let render term st =
+  Notty_unix.Term.image term (img st (Notty_unix.Term.size term))
 
 (*
    ### Interface even handling
@@ -338,55 +365,45 @@ let render st term =
 let update st = function
 
   (* Up and Down arrows *)
-  | `Key (`Arrow `Up, _) ->
-    move_cursor_up st;
-    Lwt.return_unit
-  | `Key (`Arrow `Down, _) ->
-    move_cursor_down st;
-    Lwt.return_unit
+  | `Key (`Arrow `Up, _) -> move_cursor_up st;
+  | `Key (`Arrow `Down, _) -> move_cursor_down st;
 
   (* Page Up and Down *)
-  | `Key (`Page `Up, _) ->
-    move_cursor_up_up st;
-    Lwt.return_unit
-  | `Key (`Page `Down, _) ->
-    move_cursor_down_down st;
-    Lwt.return_unit
+  | `Key (`Page `Up, _) -> move_cursor_up_up st;
+  | `Key (`Page `Down, _) -> move_cursor_down_down st;
 
   (* Enter & Backspace (expand & retract) *)
-  | `Key (`Enter, _) ->
-    expand st;
-    Lwt.return_unit
-  | `Key (`Backspace, _) ->
-    rollback st;
-    Lwt.return_unit
+  | `Key (`Enter, _) -> expand st;
+  | `Key (`Backspace, _) -> rollback st;
 
   (* Toggle full display *)
-  | `Key (`Uchar 116, _) (* 't' *) ->
-    toggle st;
-    Lwt.return_unit
-  | _ -> Lwt.return_unit
+  | `Key (`Uchar 116, _) (* 't' *) -> toggle st
 
-let handle st term = function
-  | `Key (`Escape, _) | `Key (`Uchar 113, _) (* 'q' *) ->
-    Notty_lwt.Term.release term
-  | event ->
-    let%lwt () = update st event in
-    render st term
+  (* Catch_al *)
+  | _ -> ()
 
 (*
    ### Main function
 *)
 
+let rec refresh term st =
+  render term st; loop term st
+
+and loop term st =
+  match Notty_unix.Term.event term with
+  | `Key (`Escape, _) | `Key (`Uchar 113, _) (* 'q' *) ->
+    Notty_unix.Term.release term
+  | event ->
+    update st event;
+    refresh term st
+
 let main filename =
   let st = mk filename in
   let () = init st in
-  let term = Notty_lwt.Term.create () in
-  let _ = Lwt_unix.on_signal Sys.sigint (fun _ ->
-      Lwt_main.run @@ Notty_lwt.Term.release term) in
-  Lwt_main.run @@
-  let%lwt () = render st term in
-  Lwt_stream.iter_s (handle st term) (Notty_lwt.Term.events term)
+  let term = Notty_unix.Term.create () in
+  Sys.set_signal Sys.sigint (Sys.Signal_handle (
+      fun _ -> Notty_unix.Term.release term));
+  refresh term st
 
 let argspec = Arg.align []
 
