@@ -74,6 +74,20 @@ let mk filename = {
   current_last = -1;
 }
 
+let first st =
+  if st.current_first = CCVector.length st.current - 1 then
+    st.current_first
+  else
+    st.current_first - 1
+
+let last st =
+  if st.current_last = 0 then
+    st.current_last
+  else
+    st.current_last + 1
+
+let span st = first st - last st + 1
+
 let toggle st =
   st.full_display <- not st.full_display
 
@@ -135,6 +149,14 @@ let move_cursor_up st =
   | Current i ->
     set_cursor st (Current (i + 1))
 
+let move_cursor_up_up st =
+  match st.cursor with
+  | Context _ -> move_cursor_up st
+  | Current i ->
+    let f = first st in
+    let j = if i < f then f else i + span st in
+    set_cursor st (Current (min j (CCVector.length st.current - 1)))
+
 let move_cursor_down st =
   match st.cursor with
   | Context i when i >= CCVector.length st.context - 1 ->
@@ -143,6 +165,14 @@ let move_cursor_down st =
     set_cursor st (Context (i + 1))
   | Current i ->
     set_cursor st (Current (max 0 (i - 1)))
+
+let move_cursor_down_down st =
+  match st.cursor with
+  | Context _ -> move_cursor_down st
+  | Current i ->
+    let l = last st in
+    let j = if i > l then l else i - span st in
+    set_cursor st (Current (max j 0))
 
 (*
    ### Rendering
@@ -157,12 +187,22 @@ let render_header st (w, h) =
       match st.mode with Causal -> "causes" | Hierarchy -> "hierarchy"
     ) in
   let header_s_len = String.length header_s in
+  let nb_events = Notty.I.(string bg_black (
+      Printf.sprintf "Currently counting %d events (at depth %d)"
+        (CCVector.length st.current) (CCVector.length st.context - 1))) in
+  let nb_displayed =
+    if st.current_first <> -1 && st.current_last <> -1 then
+      Notty.I.(string bg_black (
+          Printf.sprintf ", of which %d are displayed." (st.current_first - st.current_last + 1)))
+    else
+      Notty.I.empty
+  in
   Notty.I.(
-    string bg_black header_s <|>
-    string bg_blue (String.make (w - header_s_len) ' ') <->
-    string bg_black (Printf.sprintf "context: %d (%d) --- current: %d/%d (%d)"
-                       st.context_start (CCVector.length st.context)
-                       st.current_first st.current_last (CCVector.length st.current)))
+    (string bg_black header_s <|> string bg_blue (String.make (w - header_s_len) ' '))
+    <->
+    (nb_events <|> nb_displayed)
+  )
+
 
 let render_footer (w, h) =
   let img = List.fold_left (fun i (k, s) ->
@@ -224,21 +264,54 @@ let render_current st (h, w) =
     in
     let highlight = false in
     let full_display = false in
+    (* Compute space left available *)
     let h' = Notty.I.height !img in
     let space = max 0 (h - h') in
-    let first = min st.current_first (start + space) in
-    let space = max 0 (space - (first - start)) in
-    let last = max 0 (start - space) in
+
+    (* The minimum number of lines we want to print after the cursor position *)
+    let need_space_after = if start = 0 then 0 else 1 in
+
+    (* what is the first event to print, and do we need to print ellipsis
+       before (because it is not the first in the vec) ? *)
+    let first, ellipsis_first =
+      let f = st.current_first in
+      let l = CCVector.length st.current - 1 in
+      let tmp = start + space - need_space_after in
+      if f < tmp then
+        f, (f < l)
+      else if tmp = l then
+        tmp, false
+      else
+        tmp - 1, true
+    in
+    let space_taken = first - start + (if ellipsis_first then 1 else 0) in
+    let space = max 0 (space - space_taken) in
+    assert (space >= need_space_after);
+    (* Same as before, but for the last elemtn to print) *)
+    let last, ellipsis_last =
+      let tmp = start - space in
+      if tmp <= 0 then
+        0, false
+      else
+        tmp + 1, true
+    in
+
+    (* Update state information *)
+    st.current_first <- first;
+    st.current_last <- last;
+
     for index = start + 1 to first do
       let e = CCVector.get st.current index in
       img := Notty.I.((render_event ~highlight ~full_display e w) <-> !img)
     done;
+    if ellipsis_first then
+      img := Notty.I.(string bg_black "..." <-> !img);
     for index = start - 1 downto last do
       let e = CCVector.get st.current index in
       img := Notty.I.(!img <-> (render_event ~highlight ~full_display e w))
     done;
-    st.current_first <- first;
-    st.current_last <- last;
+    if ellipsis_last then
+      img := Notty.I.(!img <-> string bg_black "...");
     !img
   end
 
@@ -268,18 +341,32 @@ let render st term =
 *)
 
 let update st = function
+
+  (* Up and Down arrows *)
   | `Key (`Arrow `Up, _) ->
     move_cursor_up st;
     Lwt.return_unit
   | `Key (`Arrow `Down, _) ->
     move_cursor_down st;
     Lwt.return_unit
+
+  (* Page Up and Down *)
+  | `Key (`Page `Up, _) ->
+    move_cursor_up_up st;
+    Lwt.return_unit
+  | `Key (`Page `Down, _) ->
+    move_cursor_down_down st;
+    Lwt.return_unit
+
+  (* Enter & Backspace (expand & retract) *)
   | `Key (`Enter, _) ->
     expand st;
     Lwt.return_unit
   | `Key (`Backspace, _) ->
     rollback st;
     Lwt.return_unit
+
+  (* Toggle full display *)
   | `Key (`Uchar 116, _) (* 't' *) ->
     toggle st;
     Lwt.return_unit
