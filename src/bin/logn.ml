@@ -74,20 +74,6 @@ let mk filename = {
   current_last = -1;
 }
 
-let first st =
-  if st.current_first = CCVector.length st.current - 1 then
-    st.current_first
-  else
-    st.current_first - 1
-
-let last st =
-  if st.current_last = 0 then
-    st.current_last
-  else
-    st.current_last + 1
-
-let span st = first st - last st + 1
-
 let toggle st =
   st.full_display <- not st.full_display
 
@@ -97,8 +83,15 @@ let set_cursor st c =
   | Context i ->
     st.context_start <- min i st.context_start
   | Current i ->
-    st.current_first <- max i st.current_first;
-    st.current_last <- min i st.current_last
+    let l = CCVector.length st.current - 1 in
+    if i = l - 1 then
+      st.current_first <- l
+    else
+      st.current_first <- max i st.current_first;
+    if i = 1 then
+      st.current_last <- 0
+    else
+      st.current_last <- min i st.current_last
 
 let refresh_current st =
   let e = CCVector.get st.context (CCVector.length st.context - 1) in
@@ -153,8 +146,9 @@ let move_cursor_up_up st =
   match st.cursor with
   | Context _ -> move_cursor_up st
   | Current i ->
-    let f = first st in
-    let j = if i < f then f else i + span st in
+    let f = st.current_first in
+    let l = st.current_last in
+    let j = if i < f then f else i + (f - l) in
     set_cursor st (Current (min j (CCVector.length st.current - 1)))
 
 let move_cursor_down st =
@@ -170,8 +164,9 @@ let move_cursor_down_down st =
   match st.cursor with
   | Context _ -> move_cursor_down st
   | Current i ->
-    let l = last st in
-    let j = if i > l then l else i - span st in
+    let f = st.current_first in
+    let l = st.current_last in
+    let j = if i > l then l else i - (f - l - 1) in
     set_cursor st (Current (max j 0))
 
 (*
