@@ -74,6 +74,9 @@ let mk filename = {
   current_last = -1;
 }
 
+let toggle st =
+  st.full_display <- not st.full_display
+
 let set_cursor st c =
   st.cursor <- c;
   match c with
@@ -171,13 +174,28 @@ let render_footer (w, h) =
   else
     img
 
+let split_string w s =
+  assert (w > 0);
+  let rec aux w s i acc =
+    if i >= String.length s then acc
+    else begin
+      let len = min w (String.length s - i) in
+      aux w s (i + len) (String.sub s i len :: acc)
+    end
+  in
+  aux w s 0 []
+
 let render_event ~highlight ~full_display e w =
   let attr = if highlight then bg_yellow else bg_black in
-  let s = Printf.sprintf "[%d] %s" e.E.id e.E.descr in
-  Notty.I.string attr s
+  let l =
+    if full_display then split_string (w - 10) e.E.descr
+    else [e.E.descr]
+  in
+  let img = List.fold_left (fun img s ->
+      Notty.I.(string attr s <-> img)) Notty.I.empty l in
+  Notty.I.((string attr (Printf.sprintf "[%7d] " e.E.id)) <|> img)
 
 let render_context st (h, w) =
-  let full_display = st.full_display in
   let cursor = match st.cursor with
     | Context i -> i
     | _ -> -1
@@ -185,6 +203,7 @@ let render_context st (h, w) =
   let img = ref Notty.I.empty in
   for index = st.context_start to CCVector.length st.context - 1 do
     let highlight = index = cursor in
+    let full_display = highlight && st.full_display in
     let e = CCVector.get st.context index in
     img := Notty.I.(!img <-> (render_event ~highlight ~full_display e w))
   done;
@@ -260,6 +279,9 @@ let update st = function
     Lwt.return_unit
   | `Key (`Backspace, _) ->
     rollback st;
+    Lwt.return_unit
+  | `Key (`Uchar 116, _) (* 't' *) ->
+    toggle st;
     Lwt.return_unit
   | _ -> Lwt.return_unit
 
