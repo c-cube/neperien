@@ -245,7 +245,7 @@ let split_string w s =
       aux w s (i + len) (String.sub s i len :: acc)
     end
   in
-  aux w s 0 []
+  CCList.flat_map (fun s -> aux w s 0 []) (CCString.lines s)
 
 let render_event ~highlight ~full_display e w =
   let attr = if highlight then bg_yellow else bg_black in
